@@ -1,0 +1,47 @@
+{
+    "name": "darangonaut/laravel-doctrine-projections",
+    "description": "Read-only Eloquent models generated from Doctrine ORM metadata — query with Eloquent, write through your domain.",
+    "keywords": ["laravel", "doctrine", "eloquent", "read-model", "projection", "code-generation"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Peter Markuška",
+            "email": "markus48@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "doctrine/dbal": "^4.0",
+        "doctrine/orm": "^3.1",
+        "illuminate/console": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/database": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/support": "^11.0 || ^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.18",
+        "phpunit/phpunit": "^11.0 || ^12.0",
+        "symfony/cache": "^8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Darangonaut\\DoctrineProjections\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Darangonaut\\DoctrineProjections\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Darangonaut\\DoctrineProjections\\ProjectionsServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
