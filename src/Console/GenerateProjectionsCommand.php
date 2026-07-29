@@ -6,6 +6,7 @@ namespace Darangonaut\DoctrineProjections\Console;
 
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
+use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Doctrine\ORM\EntityManagerInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -20,7 +21,9 @@ use Illuminate\Support\Facades\File;
  */
 final class GenerateProjectionsCommand extends Command
 {
-    protected $signature = 'doctrine:projections {--dry : Render and report, write nothing}';
+    protected $signature = 'doctrine:projections
+                            {--dry : Render and report, write nothing}
+                            {--check : Fail if regenerating would change anything (for CI)}';
 
     protected $description = 'Generate read-only Eloquent projections from Doctrine mapping';
 
@@ -49,6 +52,10 @@ final class GenerateProjectionsCommand extends Command
             }
         }
 
+        if ($this->option('check')) {
+            return $this->check($projections, $path);
+        }
+
         if (! $this->option('dry')) {
             File::ensureDirectoryExists($path);
 
@@ -73,6 +80,57 @@ final class GenerateProjectionsCommand extends Command
             count($projections),
             $this->option('dry') ? ' (dry run, nothing written)' : '',
         ));
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * CI mode: assert the committed files already match the mapping.
+     *
+     * The failure this catches is a deploy where someone changed an entity
+     * and forgot to regenerate — the projection then silently lacks the new
+     * column.
+     *
+     * @param  array<string, RenderedProjection>  $projections
+     */
+    private function check(array $projections, string $path): int
+    {
+        $stale = [];
+
+        foreach ($projections as $projection) {
+            $file = $path.'/'.$projection->className.'.php';
+
+            if (! File::exists($file)) {
+                $stale[] = $projection->className.' — missing';
+
+                continue;
+            }
+
+            if (File::get($file) !== $projection->code) {
+                $stale[] = $projection->className.' — out of date';
+            }
+        }
+
+        foreach (File::glob($path.'/*.php') as $existing) {
+            $class = pathinfo($existing, PATHINFO_FILENAME);
+
+            if (! isset($projections[$class])) {
+                $stale[] = $class.' — orphaned, no entity maps to it';
+            }
+        }
+
+        if ($stale !== []) {
+            $this->components->error('Projections do not match the mapping:');
+            foreach ($stale as $line) {
+                $this->line('  '.$line);
+            }
+            $this->newLine();
+            $this->line('  Run `php artisan doctrine:projections` and commit the result.');
+
+            return self::FAILURE;
+        }
+
+        $this->components->info(sprintf('%d projection(s) up to date.', count($projections)));
 
         return self::SUCCESS;
     }

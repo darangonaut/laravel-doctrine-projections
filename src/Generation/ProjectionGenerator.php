@@ -7,11 +7,13 @@ namespace Darangonaut\DoctrineProjections\Generation;
 use Carbon\CarbonImmutable;
 use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
+use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\ManyToManyInverseSideMapping;
 use Doctrine\ORM\Mapping\ManyToManyOwningSideMapping;
 use Doctrine\ORM\Mapping\OneToOneInverseSideMapping;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
@@ -56,6 +58,7 @@ final class ProjectionGenerator
             static fn (ClassMetadata $meta): bool => ! $meta->isMappedSuperclass && ! $meta->isEmbeddedClass,
         ));
 
+        $this->guardAgainstUnsupportedInheritance($metadata);
         $this->guardAgainstDuplicateNames($metadata);
 
         $this->reserved = array_map(
@@ -71,6 +74,30 @@ final class ProjectionGenerator
         }
 
         return $rendered;
+    }
+
+    /**
+     * Class table inheritance spreads one entity across several tables and
+     * needs a join to reconstruct. An Eloquent model bound to a single
+     * table cannot express that, and a projection that quietly returns
+     * only the root columns is worse than none.
+     *
+     * Single table inheritance is supported — see discriminatorScope().
+     *
+     * @param  list<ClassMetadata<object>>  $metadata
+     *
+     * @throws UnsupportedMapping
+     */
+    private function guardAgainstUnsupportedInheritance(array $metadata): void
+    {
+        $joined = array_values(array_map(
+            static fn (ClassMetadata $meta): string => $meta->getName(),
+            array_filter($metadata, static fn (ClassMetadata $meta): bool => $meta->isInheritanceTypeJoined()),
+        ));
+
+        if ($joined !== []) {
+            throw UnsupportedMapping::joinedInheritance($joined);
+        }
     }
 
     /**
@@ -245,11 +272,44 @@ final class ProjectionGenerator
             $out .= "        ];\n    }\n";
         }
 
+        $out .= $this->discriminatorScope($meta, $modelClass);
+
         foreach ($meta->getAssociationMappings() as $name => $assoc) {
             $out .= $this->relation($name, $assoc, $modelClass);
         }
 
         return $out;
+    }
+
+    /**
+     * Under single table inheritance every subclass shares one table, so a
+     * plain Eloquent model would happily return its siblings' rows —
+     * CardPayment::all() handing back cash payments. A global scope on the
+     * discriminator column restores the boundary.
+     *
+     * The root class gets no scope: "every payment" is a meaningful query
+     * and that is exactly what the root represents.
+     *
+     * @param  ClassMetadata<object>  $meta
+     */
+    private function discriminatorScope(ClassMetadata $meta, string $modelClass): string
+    {
+        if (! $meta->isInheritanceTypeSingleTable() || ($meta->discriminatorValue ?? null) === null) {
+            return '';
+        }
+
+        $builder = $this->short(Builder::class, $modelClass);
+
+        return sprintf(
+            "\n    /** Single table inheritance — this class owns only its own rows. */\n"
+            ."    protected static function booted(): void\n    {\n"
+            ."        static::addGlobalScope('doctrine_discriminator', static function (%s \$query): void {\n"
+            ."            \$query->where('%s', '%s');\n"
+            ."        });\n    }\n",
+            $builder,
+            $meta->discriminatorColumn['name'],
+            $meta->discriminatorValue,
+        );
     }
 
     /**

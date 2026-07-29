@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Tests\Unit;
 
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
+use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Darangonaut\DoctrineProjections\Tests\EntityManagerFactory;
@@ -131,10 +132,53 @@ final class ProjectionGeneratorTest extends TestCase
         $this->generate('Duplicate');
     }
 
+    /**
+     * Under single table inheritance every subclass shares one table, so
+     * without a discriminator scope CardPayment::all() would hand back
+     * cash payments too.
+     */
+    #[Test]
+    public function single_table_inheritance_scopes_subclasses_to_their_own_rows(): void
+    {
+        $projections = $this->generate('Inheritance');
+
+        self::assertStringContainsString(
+            "\$query->where('kind', 'card');",
+            $projections['CardPayment']->code,
+        );
+        self::assertStringContainsString(
+            "\$query->where('kind', 'cash');",
+            $projections['CashPayment']->code,
+        );
+    }
+
+    #[Test]
+    public function the_inheritance_root_stays_unscoped(): void
+    {
+        // "every payment" is a meaningful query and the root is what
+        // represents it
+        $code = $this->generate('Inheritance')['Payment']->code;
+
+        self::assertStringNotContainsString('addGlobalScope', $code);
+        self::assertStringContainsString("protected \$table = 'payments';", $code);
+    }
+
+    #[Test]
+    public function joined_inheritance_is_refused(): void
+    {
+        // spans several tables; an Eloquent model is bound to one
+        $this->expectException(UnsupportedMapping::class);
+        $this->expectExceptionMessageMatches('/JOINED/');
+
+        $this->generate('Joined');
+    }
+
     #[Test]
     public function generated_code_is_syntactically_valid_php(): void
     {
-        foreach ($this->generate() as $class => $projection) {
+        $all = [...$this->generate(), ...$this->generate('Inheritance'), ...$this->generate('Collide')];
+
+        foreach ($all as $class => $projection) {
             $file = tempnam(sys_get_temp_dir(), 'projection').'.php';
             file_put_contents($file, $projection->code);
 

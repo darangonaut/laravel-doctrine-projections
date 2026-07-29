@@ -47,7 +47,13 @@ If you already use `laravel-doctrine/orm`, you are done.
 ```bash
 php artisan doctrine:projections          # generate
 php artisan doctrine:projections --dry    # render and report, write nothing
+php artisan doctrine:projections --check  # CI: fail if regenerating would change anything
 ```
+
+`--check` is the one worth wiring into CI. The failure it catches is a
+deploy where someone changed an entity and forgot to regenerate — the
+projection then silently lacks the new column. It also reports orphaned
+files whose entity is gone.
 
 Configure where they land in `config/doctrine-projections.php`:
 
@@ -83,12 +89,24 @@ holds only until someone names a column differently.
 | `enumType` | an enum cast |
 | non-integer key | `$keyType` + `$incrementing = false` |
 | composite key | `$primaryKey = null` **and a warning** — see below |
+| single table inheritance | a discriminator global scope on each subclass |
 
 **Composite keys are refused, not guessed.** Eloquent has no support for
 them, so rather than silently picking the first column (which would make
 `find()` return an arbitrary row) the projection is emitted with
 `$primaryKey = null` and the command warns. Reading via `where()` works;
 `find()` and `getKey()` do not.
+
+**Single table inheritance is scoped, not ignored.** Every subclass shares
+one table, so without a filter `CardPayment::all()` would hand back cash
+payments. Each subclass gets a global scope on the discriminator column;
+the root class stays unscoped, because "every payment" is a meaningful
+query and the root is what represents it.
+
+**Class table inheritance (JOINED) is refused.** The entity spans several
+tables and needs a join to reconstruct — an Eloquent model bound to one
+table cannot express that, and a projection quietly returning only the root
+columns would be worse than none.
 
 Name collisions are handled: an entity called `HasMany`, `Model` or
 `ReadOnlyModel` produces fully-qualified references instead of a broken
@@ -191,6 +209,21 @@ A welcome side effect: it is one connection, so `DB::transaction()` wraps
 `$em->flush()` too. `SharedPdoConnection` handles the transaction overlap —
 if one is already open, Doctrine borrows it rather than starting its own.
 
+## What is not covered
+
+Being explicit about the edges, since a generator that guesses is worse
+than one that refuses:
+
+- **Class table inheritance** — refused with an error (see above).
+- **Custom Doctrine types** get no cast, so they read back as the raw
+  column value. Add a cast by hand in the host app if you need one — but
+  remember the directory is regenerated, so it belongs in a subclass or an
+  accessor elsewhere, not in the generated file.
+- **Embeddables and mapped superclasses** are skipped: they have no table
+  of their own.
+- **Doctrine filters and second-level cache** do not apply to projections.
+  They query the table directly.
+
 ## Requirements
 
 PHP 8.3+, Doctrine ORM 3.1+, DBAL 4, Laravel 11/12/13.
@@ -202,10 +235,14 @@ composer install
 vendor/bin/phpunit
 ```
 
-The suite is deliberately split: generation and SQL classification are pure
-transformations and run without a database, while the lock is verified by
-actually attempting every write against SQLite — a promise like this one is
-worth testing for real rather than by inspection.
+52 tests. The suite is deliberately split:
+
+generation and SQL classification are pure transformations and run without
+a database, while the lock and the inheritance scope are verified against
+real SQLite — the lock by attempting all 23 write paths, the scope by
+writing the generated files out, loading them and querying a table that
+holds rows of every subclass. Asserting on emitted strings would have
+passed just as happily while the scope did nothing.
 
 ## License
 
