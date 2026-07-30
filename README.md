@@ -255,6 +255,27 @@ about it.
 reject at runtime; the diff cannot see that coming, and on MySQL there is
 no rollback to save you.
 
+### Two changes the diff cannot make for you
+
+**Renaming a table.** Doctrine detects a renamed *column* and carries the
+data over; it does not do the same for a table. The diff creates the new
+one empty and leaves the old one sitting there with every row still in
+it — and if a join table points at the renamed entity, the migration then
+fails on a foreign key. Write that migration by hand.
+
+**Deleting an entity.** Its table is no longer mapped, so the schema
+filter hides it and the diff reports nothing to do — the table stays,
+with its rows, indefinitely. That is deliberate: refusing to drop tables
+it does not map is the same rule that catches a broken filter. Drop it
+yourself when you are sure.
+
+`doctrine:projections --check` does catch the model left behind:
+
+```
+ERROR  Projections do not match the mapping:
+       Label — orphaned, no entity maps to it
+```
+
 Generated migrations are **raw SQL and therefore driver-specific** — output
 generated on MySQL will not run on SQLite.
 
@@ -266,15 +287,22 @@ its own, so without a filter it will propose dropping `users`, `sessions`
 and `migrations`. Set this up when you build the EntityManager:
 
 ```php
-$owned = array_map(
-    fn ($meta) => $meta->getTableName(),
-    $em->getMetadataFactory()->getAllMetadata(),
-);
+use Darangonaut\DoctrineProjections\Support\MappedTables;
+
+$owned = MappedTables::of($em);
 
 $em->getConnection()->getConfiguration()->setSchemaAssetsFilter(
-    fn (string $table): bool => in_array($table, $owned, true),
+    static fn (string $table): bool => in_array($table, $owned, true),
 );
 ```
+
+Use `MappedTables` rather than mapping `getTableName()` over the metadata
+yourself. **A join table has no entity, so the obvious one-liner leaves it
+out** — and Doctrine then cannot see a table it owns. `doctrine:diff` can
+no longer tell whether a rebuild of that join table keeps its rows, so it
+asks for `--allow-destructive` on a migration that loses nothing. Nothing
+reveals this until something touches a join table; renaming the table of a
+joined entity is enough.
 
 ## Optional: one connection for both sides
 

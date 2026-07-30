@@ -6,7 +6,23 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `Support\MappedTables` — every table the mapping owns, join tables
+  included. The README previously showed a hand-rolled
+  `array_map(getTableName(), ...)` for the DBAL schema asset filter, which
+  silently omits join tables: Doctrine then cannot see a table it owns,
+  and `doctrine:diff` asks for `--allow-destructive` on a join-table
+  rebuild that loses nothing.
+
 ### Fixed
+
+- **A legitimate join-table rebuild is no longer reported as a broken
+  schema filter.** The classifier's owned-table list came from
+  `getTableName()`, which has no entry for a join table, so
+  `DROP TABLE task_tag` looked like dropping a table nobody maps — fatal,
+  and not overridable by any flag. Renaming the table of a joined entity
+  was enough to hit it, and the error blamed the wrong thing.
 
 - **Generated migrations are now atomic where the database can roll DDL
   back** (SQLite, PostgreSQL). Laravel's SQLite grammar reports

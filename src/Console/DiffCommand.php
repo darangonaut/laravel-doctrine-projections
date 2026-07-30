@@ -6,6 +6,7 @@ namespace Darangonaut\DoctrineProjections\Console;
 
 use Darangonaut\DoctrineProjections\Schema\StatementClassifier;
 use Darangonaut\DoctrineProjections\Support\Config;
+use Darangonaut\DoctrineProjections\Support\MappedTables;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\ORM\EntityManagerInterface;
@@ -45,7 +46,7 @@ final class DiffCommand extends Command
 
         $sql = (new SchemaTool($em))->getUpdateSchemaSql($metadata);
 
-        $tables = array_map(static fn ($meta): string => $meta->getTableName(), $metadata);
+        $tables = MappedTables::fromMetadata($metadata);
 
         $classified = (new StatementClassifier($tables, $this->currentColumns($em, $tables)))
             ->classify($sql);
