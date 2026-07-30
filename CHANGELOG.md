@@ -4,7 +4,11 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] — 2026-07-30
+
+Everything here came out of walking through schema changes one at a time
+and checking what happens when each one *fails*, rather than when it
+succeeds. Two of the four scenarios tried turned up bugs.
 
 ### Added
 
@@ -36,6 +40,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   as run. The same failure now leaves every row untouched.
 
   MySQL and MariaDB implicitly commit on DDL, so nothing is wrapped there.
+
+### Documented
+
+- Renaming a *table* is not something the diff can do: Doctrine detects a
+  renamed column and carries the data across, but for a table it creates
+  the new one empty and leaves the old one behind. Write that one by hand.
+- Deleting an entity leaves its table in place. The schema filter stops
+  showing it, so the diff has nothing to say — deliberate, since refusing
+  to drop unmapped tables is what catches a broken filter.
+  `doctrine:projections --check` still reports the orphaned model.
 
 ## [0.2.0] — 2026-07-30
 
@@ -110,6 +124,7 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.3.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.3.0
 [0.2.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.2.0
 [0.1.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.1.1
 [0.1.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.1.0
