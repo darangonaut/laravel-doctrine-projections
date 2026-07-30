@@ -251,7 +251,7 @@ combinations are covered by CI.
 
 ```bash
 composer install
-vendor/bin/phpunit                    # 52 tests
+vendor/bin/phpunit
 vendor/bin/phpstan analyse            # level max, no baseline
 vendor/bin/pint --test
 ```
