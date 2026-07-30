@@ -6,6 +6,7 @@ namespace Darangonaut\DoctrineProjections\Tests\Differential;
 
 use Darangonaut\DoctrineProjections\Tests\Fixtures\SelfRef\Person;
 use Darangonaut\DoctrineProjections\Tests\Fixtures\SelfRef\Ticket;
+use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -92,8 +93,8 @@ final class SelfReferenceDifferentialTest extends TestCase
         $ticket = $projection::query()->where('subject', 'Rozbitý export')->first();
 
         self::assertNotNull($ticket);
-        self::assertSame('Peter', $ticket->getAttribute('author')?->getAttribute('name'));
-        self::assertSame('Sam', $ticket->getAttribute('reviewer')?->getAttribute('name'));
+        self::assertSame('Peter', $this->nameOf($ticket->getAttribute('author')));
+        self::assertSame('Sam', $this->nameOf($ticket->getAttribute('reviewer')));
     }
 
     #[Test]
@@ -104,7 +105,7 @@ final class SelfReferenceDifferentialTest extends TestCase
 
         self::assertNotNull($ticket);
         self::assertNull($ticket->getAttribute('reviewer'));
-        self::assertSame('Jana', $ticket->getAttribute('author')?->getAttribute('name'));
+        self::assertSame('Jana', $this->nameOf($ticket->getAttribute('author')));
     }
 
     /** @return list<string> */
@@ -115,14 +116,22 @@ final class SelfReferenceDifferentialTest extends TestCase
         $names = [];
 
         foreach ($collection as $model) {
-            self::assertIsObject($model);
-            $name = $model->getAttribute('name');
-            self::assertIsString($name);
-            $names[] = $name;
+            $names[] = $this->nameOf($model);
         }
 
         sort($names);
 
         return $names;
+    }
+
+    private function nameOf(mixed $model): string
+    {
+        self::assertInstanceOf(Model::class, $model);
+
+        $name = $model->getAttribute('name');
+
+        self::assertIsString($name);
+
+        return $name;
     }
 }

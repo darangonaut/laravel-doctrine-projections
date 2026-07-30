@@ -29,6 +29,9 @@ final class GenerateProjectionsCommand extends Command
 
     protected $description = 'Generate read-only Eloquent projections from Doctrine mapping';
 
+    /** The header every generated projection carries — see ProjectionGenerator::render(). */
+    private const GENERATED_MARKER = 'GENERATED — do not edit.';
+
     public function handle(EntityManagerInterface $em): int
     {
         $namespace = Config::string('doctrine-projections.namespace');
@@ -60,6 +63,25 @@ final class GenerateProjectionsCommand extends Command
 
         if (! $this->option('dry')) {
             File::ensureDirectoryExists($path);
+
+            $foreign = self::handWrittenFilesIn($path);
+
+            if ($foreign !== []) {
+                $this->components->error(
+                    'The output directory holds PHP files this command did not generate, so it '
+                    .'will not touch it:',
+                );
+
+                foreach ($foreign as $file) {
+                    $this->line('  '.$file);
+                }
+
+                $this->newLine();
+                $this->line('  `path` in config/doctrine-projections.php should point at a directory');
+                $this->line('  of its own — the contents are build output and get replaced.');
+
+                return self::FAILURE;
+            }
 
             foreach (self::phpFilesIn($path) as $stale) {
                 File::delete($stale);
@@ -108,6 +130,31 @@ final class GenerateProjectionsCommand extends Command
     private static function phpFilesIn(string $dir): array
     {
         return array_values(array_filter(File::glob($dir.'/*.php'), is_string(...)));
+    }
+
+    /**
+     * PHP files in the output directory that this command did not write.
+     *
+     * The directory is wiped on every run, and `path` is one config value
+     * away from being somewhere that matters — `app_path('Models')`
+     * instead of `app_path('Models/Projections')` is an easy thing to
+     * type, and every hand-written model would go with it. Generated
+     * files carry a marker in their header; anything without one means
+     * the path is pointing at the wrong place.
+     *
+     * @return list<string>
+     */
+    private static function handWrittenFilesIn(string $dir): array
+    {
+        $foreign = [];
+
+        foreach (self::phpFilesIn($dir) as $file) {
+            if (! str_contains(File::get($file), self::GENERATED_MARKER)) {
+                $foreign[] = $file;
+            }
+        }
+
+        return $foreign;
     }
 
     /**

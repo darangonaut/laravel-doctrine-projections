@@ -96,6 +96,10 @@ generated, and emitting one anyway would produce a file that fatals on
 first use.
 
 The output directory is wiped on every run — treat it as build output.
+It has to be a directory of its own: the command refuses to run if it
+finds PHP files it did not write, because `app_path('Models')` instead of
+`app_path('Models/Projections')` is one character away and would take
+every hand-written model with it.
 Commit it if you want the models browsable, or gitignore it and generate on
 deploy. Either works, as long as generation runs **right after `migrate`**:
 a projection that does not know about a new column is worse than no
