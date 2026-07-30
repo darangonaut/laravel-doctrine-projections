@@ -434,17 +434,61 @@ final class ProjectionGenerator
         }
 
         $builder = $this->imports->reference(Builder::class);
+        $values = $this->discriminatorValuesFor($meta);
+
+        // One value is the common case and reads better as where().
+        if (count($values) === 1) {
+            return sprintf(
+                "\n    /** Single table inheritance — this class owns only its own rows. */\n"
+                ."    protected static function booted(): void\n    {\n"
+                ."        static::addGlobalScope('doctrine_discriminator', static function (%s \$query): void {\n"
+                ."            \$query->where('%s', '%s');\n"
+                ."        });\n    }\n",
+                $builder,
+                $column,
+                $values[0],
+            );
+        }
 
         return sprintf(
-            "\n    /** Single table inheritance — this class owns only its own rows. */\n"
+            "\n    /** Single table inheritance — this class and everything below it. */\n"
             ."    protected static function booted(): void\n    {\n"
             ."        static::addGlobalScope('doctrine_discriminator', static function (%s \$query): void {\n"
-            ."            \$query->where('%s', '%s');\n"
+            ."            \$query->whereIn('%s', ['%s']);\n"
             ."        });\n    }\n",
             $builder,
             $column,
-            (string) $value,
+            implode("', '", $values),
         );
+    }
+
+    /**
+     * The discriminator values a class answers to: its own, plus every
+     * subclass below it.
+     *
+     * Scoping to its own alone is right for a leaf and wrong for anything
+     * with children — a `CorporateCardPayment` *is* a `CardPayment`, and
+     * Doctrine returns it from `CardPayment` queries. Measured on a
+     * three-level hierarchy, the projection returned 1 row where the
+     * entity returned 3: an undercount, silently.
+     *
+     * @param  ClassMetadata<object>  $meta
+     * @return non-empty-list<string>
+     */
+    private function discriminatorValuesFor(ClassMetadata $meta): array
+    {
+        $own = $meta->discriminatorValue;
+        $values = [is_scalar($own) ? (string) $own : ''];
+
+        foreach ($meta->subClasses as $subClass) {
+            $subValue = $this->em->getClassMetadata($subClass)->discriminatorValue;
+
+            if (is_scalar($subValue)) {
+                $values[] = (string) $subValue;
+            }
+        }
+
+        return array_values(array_unique($values));
     }
 
     /**

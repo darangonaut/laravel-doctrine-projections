@@ -160,6 +160,11 @@ payments. Each subclass gets a global scope on the discriminator column;
 the root class stays unscoped, because "every payment" is a meaningful
 query and the root is what represents it.
 
+The scope covers a class **and everything below it**. A
+`CorporateCardPayment` is a `CardPayment`, and Doctrine returns it from
+`CardPayment` queries — scoping to the class's own value alone is right
+for a leaf and an undercount for anything with children.
+
 **Class table inheritance (JOINED) is refused.** The entity spans several
 tables and needs a join to reconstruct — an Eloquent model bound to one
 table cannot express that, and a projection quietly returning only the root
