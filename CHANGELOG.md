@@ -4,6 +4,54 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] — 2026-07-30
+
+Another round of invented scenarios. The bugs have moved: these are not
+mistakes in reading the mapping any more, but in the places the package
+touches Laravel and the filesystem — which is also why the differential
+suite could not have found them.
+
+### Fixed
+
+- **A table mapped into its own schema lost it.** `getTableName()` returns
+  the bare name, so `#[ORM\Table(name: 'entries', schema: 'archive')]`
+  produced `$table = 'entries'` while SchemaTool created
+  `archive.entries`. On PostgreSQL the projection would read whichever
+  `entries` the search path finds first — an error, or a different table
+  with the same name. `MappedTables` had the same gap, which made
+  `doctrine:diff` read that table's DDL as touching something nobody maps.
+
+- **The output directory is no longer wiped if it holds anything this
+  command did not write.** It is emptied of `*.php` on every run, and
+  `path` is one config value away from somewhere that matters —
+  `app_path('Models')` instead of `app_path('Models/Projections')` would
+  have taken every hand-written model with it. Stale *generated* files are
+  still removed; a file without the `GENERATED` header stops the run
+  before anything is deleted or written.
+
+  If you deliberately keep other PHP in that directory, this will now
+  fail. That is the intent.
+
+- **Restoring a queued projection keeps its discriminator.** Laravel
+  restores a serialized model with `newQueryWithoutScopes()` so a
+  soft-deleted one can come back; a projection has no such case, and
+  dropping the scope meant `CardPayment::find($cashPaymentId)` was null
+  while the same id through a job handed back a `CardPayment` holding the
+  cash payment's row. Only projections that actually have a discriminator
+  scope get the override.
+
+### Verified, unchanged
+
+- `withCount()`, `withSum()`, `has()` and `whereHas()` over a relation
+  carrying `#[ORM\OrderBy]` — Laravel drops the ordering when it rewrites
+  a relation into a subquery, so the aggregates are correct. Now pinned by
+  a test, since 0.3.3 is what put an `ORDER BY` there.
+- A self-referencing `ManyToMany` and two associations onto the same
+  entity: both keep their sides and keys straight.
+- A mapped superclass gets no projection; everything extending it carries
+  its columns and casts.
+- An integer discriminator, on all three drivers.
+
 ## [0.5.0] — 2026-07-30
 
 The release that stops finding bugs by hand.
@@ -305,6 +353,7 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.5.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.1
 [0.5.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.0
 [0.4.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.4.1
 [0.4.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.4.0
