@@ -119,6 +119,7 @@ holds only until someone names a column differently.
 | `OneToOne` inverse | `hasOne(...)` |
 | `ManyToMany` owning | `belongsToMany(Genre::class, 'book_genre', 'book_id', 'genre_id')` |
 | `ManyToMany` inverse | same table, keys swapped |
+| to-one across several join columns | **skipped with a warning** — see below |
 | `#[ORM\OrderBy]` | `->orderBy(...)` chained onto the relation, field names resolved to columns |
 | `enumType` | an enum cast |
 | non-integer key | `$keyType` + `$incrementing = false` |
@@ -129,6 +130,12 @@ holds only until someone names a column differently.
 them, so rather than silently picking the first column (which would make
 `find()` return an arbitrary row) the projection is emitted with
 `$primaryKey = null` and the command warns.
+
+**An association pointing at one is skipped.** It needs two join columns
+and `belongsTo` takes one, so the generated relation matched on the first
+and ignored the rest — returning whichever row happened to share it. Both
+key columns stay on the model, documented with the types they point at,
+so the join can be written at the call site.
 
 Everything that does not need a single key column keeps working —
 `where()`, `count()`, `pluck()`, casts, eager loading:

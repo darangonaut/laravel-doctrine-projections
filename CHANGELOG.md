@@ -4,6 +4,24 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Foreign key columns are documented with the type they point at.** It
+  was hardcoded to `int`, so an entity keyed by UUID produced
+  `@property int|null $parent_uuid` for a `VARCHAR(36)` — wrong for every
+  non-integer key, and static analysis believed it. A unit test asserted
+  the wrong type, which is how it survived.
+
+- **An association joining on several columns is skipped, with a
+  warning.** Pointing at an entity with a composite key needs two join
+  columns; `belongsTo` takes one. The generator emitted
+  `belongsTo(Seat::class, 'seat_row')` and dropped the second silently,
+  so the relation matched on the row letter alone and returned whichever
+  seat in that row came first. Both key columns stay on the model, so the
+  join can be written at the call site.
+
 ## [0.4.0] — 2026-07-30
 
 A minor rather than a patch: `getKey()` used to return a value and now

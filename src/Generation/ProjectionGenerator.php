@@ -12,8 +12,10 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\InverseSideMapping;
+use Doctrine\ORM\Mapping\JoinColumnMapping;
 use Doctrine\ORM\Mapping\ManyToManyInverseSideMapping;
 use Doctrine\ORM\Mapping\ManyToManyOwningSideMapping;
+use Doctrine\ORM\Mapping\MappingException;
 use Doctrine\ORM\Mapping\OneToOneInverseSideMapping;
 use Doctrine\ORM\Mapping\ToManyAssociationMapping;
 use Doctrine\ORM\Mapping\ToOneOwningSideMapping;
@@ -282,16 +284,31 @@ final class ProjectionGenerator
                 continue;
             }
 
+            $joinColumns = $this->joinColumnsOf($assoc);
+
             $nullable = $assoc instanceof ToOneOwningSideMapping
-                ? ($assoc->joinColumns[0]->nullable ?? true)
+                ? ($joinColumns[0]->nullable ?? true)
                 : true;
 
-            // The foreign key is not among the fields, but it is queried often.
-            $lines[] = sprintf(
-                ' * @property int%s $%s',
-                $nullable ? '|null' : '',
-                $this->foreignKeyFor($assoc),
-            );
+            // The foreign keys are not among the fields, but they are
+            // queried often. Their type comes from the column they point
+            // at — it was hardcoded to `int`, which is wrong the moment a
+            // key is a UUID.
+            foreach ($joinColumns as $joinColumn) {
+                $lines[] = sprintf(
+                    ' * @property %s%s $%s',
+                    $this->referencedType($assoc, $joinColumn->referencedColumnName),
+                    $nullable ? '|null' : '',
+                    $joinColumn->name,
+                );
+            }
+
+            // More than one join column means the target has a composite
+            // key, which belongsTo cannot express — see members().
+            if (count($joinColumns) > 1) {
+                continue;
+            }
+
             $lines[] = sprintf(' * @property %s%s $%s', $target, $nullable ? '|null' : '', $property);
         }
 
@@ -341,6 +358,24 @@ final class ProjectionGenerator
                     class_basename($meta->getName()),
                     $name,
                     class_basename($assoc->targetEntity),
+                );
+
+                continue;
+            }
+
+            // A to-one association across several join columns means the
+            // target has a composite key. `belongsTo` takes one column, so
+            // the generated relation matched on the first and ignored the
+            // rest — returning any row that happened to share it, quietly.
+            if (! $assoc->isToMany() && count($this->joinColumnsOf($assoc)) > 1) {
+                $warnings[] = sprintf(
+                    'Skipped relation %s::$%s — it joins %s on %d columns, which belongsTo cannot '
+                    .'express. Matching on the first alone would return the wrong row. The key '
+                    .'columns are still readable; join them yourself.',
+                    class_basename($meta->getName()),
+                    $name,
+                    class_basename($assoc->targetEntity),
+                    count($this->joinColumnsOf($assoc)),
                 );
 
                 continue;
@@ -584,22 +619,62 @@ final class ProjectionGenerator
     }
 
     /**
-     * The foreign key column. On an owning side it is declared here; on an
-     * inverse side it lives on the other class, under the mappedBy name.
+     * The join columns of the owning side. On an owning side they are
+     * declared here; on an inverse side they live on the other class,
+     * under the mappedBy name.
+     *
+     * There is more than one when the target has a composite key.
+     *
+     * @return non-empty-list<JoinColumnMapping>
      */
-    private function foreignKeyFor(AssociationMapping $assoc): string
+    private function joinColumnsOf(AssociationMapping $assoc): array
     {
-        if ($assoc instanceof ToOneOwningSideMapping) {
-            return $assoc->joinColumns[0]->name;
-        }
-
-        $owning = $this->owningSideOf($assoc);
+        $owning = $assoc instanceof ToOneOwningSideMapping
+            ? $assoc
+            : $this->owningSideOf($assoc);
 
         if (! $owning instanceof ToOneOwningSideMapping) {
             throw UnsupportedMapping::unexpectedOwningSide($assoc->targetEntity, $owning::class);
         }
 
-        return $owning->joinColumns[0]->name;
+        // Doctrine types this as a possibly-empty list. It never is for a
+        // to-one owning side — it defaults one in — but the callers index
+        // into it, so the assumption is checked rather than trusted.
+        if ($owning->joinColumns === []) {
+            throw UnsupportedMapping::unexpectedOwningSide($assoc->targetEntity, 'an association with no join column');
+        }
+
+        return $owning->joinColumns;
+    }
+
+    /**
+     * The foreign key column. Only meaningful for a single-column join —
+     * callers handle the composite case before reaching here.
+     */
+    private function foreignKeyFor(AssociationMapping $assoc): string
+    {
+        return $this->joinColumnsOf($assoc)[0]->name;
+    }
+
+    /**
+     * The PHP type of the column a join column points at.
+     *
+     * This used to be hardcoded to `int`, so a projection referencing an
+     * entity keyed by UUID documented `@property int|null $parent_uuid`
+     * for a VARCHAR(36) — wrong for every non-integer key, and static
+     * analysis believed it.
+     */
+    private function referencedType(AssociationMapping $assoc, string $referencedColumn): string
+    {
+        $target = $this->em->getClassMetadata($assoc->targetEntity);
+
+        try {
+            return $this->phpType($target, $target->getFieldForColumn($referencedColumn));
+        } catch (MappingException) {
+            // A column with no field behind it — nothing to read a type
+            // from, and guessing is what caused this in the first place.
+            return 'mixed';
+        }
     }
 
     private function owningSideOf(AssociationMapping $assoc): AssociationMapping

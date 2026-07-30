@@ -101,7 +101,11 @@ final class ProjectionGeneratorTest extends TestCase
         $code = $this->code('Document');
 
         self::assertStringContainsString("return \$this->belongsTo(Document::class, 'parent_uuid');", $code);
-        self::assertStringContainsString('@property int|null $parent_uuid', $code);
+
+        // Document is keyed by a VARCHAR(36) uuid. This asserted `int|null`
+        // until the foreign key type stopped being hardcoded — the test was
+        // holding the bug in place.
+        self::assertStringContainsString('@property string|null $parent_uuid', $code);
         self::assertStringContainsString('@property Document|null $parent', $code);
     }
 
