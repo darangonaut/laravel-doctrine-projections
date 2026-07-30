@@ -126,6 +126,9 @@ holds only until someone names a column differently.
 | to-one across several join columns | **skipped with a warning** — see below |
 | `#[ORM\OrderBy]` | `->orderBy(...)` chained onto the relation, field names resolved to columns |
 | `enumType` | an enum cast |
+| `bigint`, `decimal` | `'string'` — Doctrine returns one, and an int or float loses digits |
+| `time` | `Casts\TimeOfDay` — anchored at the epoch, as Doctrine anchors it |
+| `simple_array` | `Casts\SimpleArray` — Laravel's `array` cast is JSON |
 | non-integer key | `$keyType` + `$incrementing = false` |
 | composite key | `$primaryKey = null` **and a warning** — see below |
 | single table inheritance | a discriminator global scope on each subclass |

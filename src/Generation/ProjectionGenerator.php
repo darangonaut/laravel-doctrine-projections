@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Generation;
 
 use Carbon\CarbonImmutable;
+use Darangonaut\DoctrineProjections\Eloquent\Casts\SimpleArray;
+use Darangonaut\DoctrineProjections\Eloquent\Casts\TimeOfDay;
 use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
@@ -907,9 +909,12 @@ final class ProjectionGenerator
             'bigint', 'decimal' => "'string'",
             'boolean' => "'boolean'",
             'float' => "'float'",
-            'datetime', 'datetime_immutable' => "'immutable_datetime'",
+            'datetime', 'datetime_immutable', 'datetimetz', 'datetimetz_immutable' => "'immutable_datetime'",
             'date', 'date_immutable' => "'immutable_date'",
-            'time', 'time_immutable' => "'immutable_datetime'",
+            // Laravel has no cast for either of these, so the package
+            // ships one that matches Doctrine's own conversion.
+            'time', 'time_immutable' => $this->imports->reference(TimeOfDay::class).'::class',
+            'simple_array' => $this->imports->reference(SimpleArray::class).'::class',
             'json' => "'array'",
             default => null,
         };
@@ -930,8 +935,10 @@ final class ProjectionGenerator
                 'float' => 'float',
                 // string on both, matching the casts above
                 'bigint', 'decimal' => 'string',
-                'datetime', 'datetime_immutable', 'date', 'date_immutable',
+                'datetime', 'datetime_immutable', 'datetimetz', 'datetimetz_immutable',
+                'date', 'date_immutable',
                 'time', 'time_immutable' => $this->imports->reference(CarbonImmutable::class),
+                'simple_array' => 'array',
                 'json' => 'array',
                 default => 'string',
             };
