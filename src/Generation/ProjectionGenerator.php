@@ -479,14 +479,28 @@ final class ProjectionGenerator
     private function discriminatorScope(ClassMetadata $meta): string
     {
         $column = $meta->discriminatorColumn?->name;
-        $value = $meta->discriminatorValue;
 
-        if (! $meta->isInheritanceTypeSingleTable() || $column === null || ! is_scalar($value)) {
+        if (! $meta->isInheritanceTypeSingleTable() || $column === null) {
+            return '';
+        }
+
+        // The root represents "every row" and stays unscoped. Everything
+        // below it is scoped — including an abstract class in the middle,
+        // which has no discriminator value of its own but does have
+        // subclasses. Requiring an own value left `AbstractFile`
+        // unscoped, so it returned folders too: Doctrine said 3 rows, the
+        // projection said 4.
+        if ($meta->rootEntityName === $meta->getName()) {
+            return '';
+        }
+
+        $values = $this->discriminatorValuesFor($meta);
+
+        if ($values === []) {
             return '';
         }
 
         $builder = $this->imports->reference(Builder::class);
-        $values = $this->discriminatorValuesFor($meta);
 
         // One value is the common case and reads better as where().
         $condition = count($values) === 1
@@ -531,12 +545,15 @@ final class ProjectionGenerator
      * entity returned 3: an undercount, silently.
      *
      * @param  ClassMetadata<object>  $meta
-     * @return non-empty-list<string>
+     * @return list<string>
      */
     private function discriminatorValuesFor(ClassMetadata $meta): array
     {
         $own = $meta->discriminatorValue;
-        $values = [is_scalar($own) ? (string) $own : ''];
+
+        // An abstract class in the middle has none of its own — it is
+        // only ever its subclasses.
+        $values = is_scalar($own) ? [(string) $own] : [];
 
         foreach ($meta->subClasses as $subClass) {
             $subValue = $this->em->getClassMetadata($subClass)->discriminatorValue;

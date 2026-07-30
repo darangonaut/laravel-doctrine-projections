@@ -184,6 +184,11 @@ The scope covers a class **and everything below it**. A
 `CardPayment` queries — scoping to the class's own value alone is right
 for a leaf and an undercount for anything with children.
 
+An abstract class in the middle of the hierarchy is scoped to its
+subclasses even though it has no discriminator value of its own. Only the
+root stays unscoped: "every payment" is a real question and the root is
+what asks it.
+
 A scoped projection also overrides `newQueryForRestoration()`. Laravel
 restores a queued model without scopes, so a soft-deleted one can come
 back; a projection has no such case, and dropping the discriminator meant
