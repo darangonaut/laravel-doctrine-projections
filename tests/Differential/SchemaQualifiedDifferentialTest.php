@@ -26,7 +26,7 @@ final class SchemaQualifiedDifferentialTest extends TestCase
             self::markTestSkipped('SQLite has no schemas; `archive.entries` would mean an attached database.');
         }
 
-        $this->createSchema();
+        $this->prepareSchema();
 
         $this->harness = Harness::for('Schema', 'DifferentialSchema'.getmypid());
 
@@ -42,21 +42,26 @@ final class SchemaQualifiedDifferentialTest extends TestCase
     }
 
     /**
-     * The schema has to exist before SchemaTool creates a table in it, and
-     * the statement differs: PostgreSQL has schemas, MySQL calls the same
-     * thing a database.
+     * The two drivers need opposite things here, which is the sort of
+     * detail only a real server tells you.
+     *
+     * PostgreSQL has schemas, and `SchemaTool` creates the one the mapping
+     * names — so creating it first collides with `CREATE SCHEMA archive`.
+     * Dropping it instead also clears the table from an earlier run.
+     *
+     * MySQL calls the same thing a database and `SchemaTool` will not
+     * create it, so there it has to exist beforehand.
      */
-    private function createSchema(): void
+    private function prepareSchema(): void
     {
-        $config = Database::laravelConfig();
         $capsule = new Manager;
-        $capsule->addConnection($config);
+        $capsule->addConnection(Database::laravelConfig());
 
-        $statement = Database::driver() === 'pgsql'
-            ? 'CREATE SCHEMA IF NOT EXISTS archive'
-            : 'CREATE DATABASE IF NOT EXISTS archive';
-
-        $capsule->getConnection()->statement($statement);
+        $capsule->getConnection()->statement(
+            Database::driver() === 'pgsql'
+                ? 'DROP SCHEMA IF EXISTS archive CASCADE'
+                : 'CREATE DATABASE IF NOT EXISTS archive',
+        );
     }
 
     #[Test]
