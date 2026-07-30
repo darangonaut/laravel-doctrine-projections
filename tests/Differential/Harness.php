@@ -7,7 +7,6 @@ namespace Darangonaut\DoctrineProjections\Tests\Differential;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Support\SharedPdoDriver;
 use Doctrine\DBAL\Connection as DbalConnection;
-use Doctrine\DBAL\Driver\PDO\SQLite\Driver as SQLiteDriver;
 use Doctrine\ORM\Configuration;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -42,14 +41,25 @@ final class Harness
     private function __construct(string $fixtureDir, private readonly string $namespace)
     {
         $this->capsule = new Capsule;
-        $this->capsule->addConnection(['driver' => 'sqlite', 'database' => ':memory:']);
+        $this->capsule->addConnection(Database::laravelConfig());
         $this->capsule->setAsGlobal();
         $this->capsule->bootEloquent();
+
+        // A driver configured but unreachable would otherwise surface as a
+        // confusing failure deep inside DBAL. Saying which one, and why,
+        // costs one query.
+        $reason = Database::unavailableReason($this->capsule->getConnection()->getPdo());
+
+        if ($reason !== null) {
+            throw new RuntimeException($reason);
+        }
 
         $this->em = $this->entityManager($fixtureDir);
 
         $metadata = $this->em->getMetadataFactory()->getAllMetadata();
 
+        // A server keeps its schema between runs, unlike sqlite :memory:.
+        (new SchemaTool($this->em))->dropSchema($metadata);
         (new SchemaTool($this->em))->createSchema($metadata);
 
         $this->loadProjections();
@@ -79,8 +89,8 @@ final class Harness
 
         // the same handle Eloquent is about to read through
         $connection = new DbalConnection(
-            ['dbname' => 'main'],
-            new SharedPdoDriver(new SQLiteDriver, $this->capsule->getConnection()->getPdo()),
+            ['dbname' => $this->capsule->getConnection()->getDatabaseName()],
+            new SharedPdoDriver(Database::dbalDriver(), $this->capsule->getConnection()->getPdo()),
             $config,
         );
 

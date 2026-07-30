@@ -59,6 +59,63 @@ jobs:
       - name: Style
         run: vendor/bin/pint --test
 
+  differential:
+    runs-on: ubuntu-latest
+    name: Differential · ${{ matrix.driver }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        driver: [sqlite, mysql, pgsql]
+
+    # Both servers start for every row. Service containers cannot be
+    # selected per matrix value, and the alternative — a job per driver —
+    # duplicates the whole setup to save a container nobody waits on.
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: projections
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psecret"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: projections
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd=pg_isready
+          --health-interval=5s --health-timeout=5s --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_sqlite, pdo_mysql, pdo_pgsql
+          coverage: none
+
+      - name: Install
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      # The suite asserts that Doctrine and the projections agree, so a
+      # driver-specific difference in quoting, casing or type mapping
+      # shows up as a disagreement rather than as an untested claim.
+      - name: Differential suite
+        run: vendor/bin/phpunit --testsuite=differential
+        env:
+          DIFFERENTIAL_DRIVER: ${{ matrix.driver }}
+          DIFFERENTIAL_HOST: 127.0.0.1
+          DIFFERENTIAL_PORT: ${{ matrix.driver == 'pgsql' && '5432' || '3306' }}
+          DIFFERENTIAL_DATABASE: projections
+          DIFFERENTIAL_USERNAME: ${{ matrix.driver == 'pgsql' && 'postgres' || 'root' }}
+          DIFFERENTIAL_PASSWORD: secret
+
   static-analysis:
     runs-on: ubuntu-latest
     name: PHPStan
