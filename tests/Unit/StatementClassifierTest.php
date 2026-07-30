@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Darangonaut\DoctrineProjections\Tests\Unit;
 
+use Darangonaut\DoctrineProjections\Schema\ClassifiedStatements;
 use Darangonaut\DoctrineProjections\Schema\StatementClassifier;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -26,6 +27,32 @@ final class StatementClassifierTest extends TestCase
         return [$result->fatal, $result->destructive, $result->warnings];
     }
 
+    /**
+     * The five statements DBAL emits to change a column on SQLite.
+     *
+     * @param  string  $parked  columns saved into the scratch table
+     * @return list<string>
+     */
+    private function rebuild(string $parked): array
+    {
+        return [
+            "CREATE TEMPORARY TABLE __temp__books AS SELECT {$parked} FROM books",
+            'DROP TABLE books',
+            'CREATE TABLE books (id INTEGER NOT NULL, PRIMARY KEY(id))',
+            "INSERT INTO books (id, whatever) SELECT {$parked} FROM __temp__books",
+            'DROP TABLE __temp__books',
+        ];
+    }
+
+    /**
+     * @param  list<string>  $sql
+     * @param  list<string>  $booksHasNow
+     */
+    private function withColumns(array $sql, array $booksHasNow): ClassifiedStatements
+    {
+        return (new StatementClassifier(self::OWNED, ['books' => $booksHasNow]))->classify($sql);
+    }
+
     #[Test]
     public function dropping_a_table_we_do_not_own_is_fatal(): void
     {
@@ -39,22 +66,75 @@ final class StatementClassifierTest extends TestCase
 
     /**
      * SQLite cannot alter a column except by rebuilding the table, so DBAL
-     * emits DROP TABLE on a table we own. Treating that as fatal makes the
-     * driver unusable — no migration could ever be generated on it.
+     * emits DROP TABLE on a table we own. Read one statement at a time that
+     * looks like total loss, when the next statement puts every row back —
+     * so a rename used to demand --allow-destructive for nothing.
      */
     #[Test]
-    public function sqlite_table_rebuild_is_destructive_not_fatal(): void
+    public function a_rebuild_that_parks_every_existing_column_needs_no_consent(): void
     {
-        [$fatal, $destructive] = $this->classify(
-            'CREATE TEMPORARY TABLE __temp__books AS SELECT id, title FROM books',
-            'DROP TABLE books',
-            'CREATE TABLE books (id INTEGER NOT NULL, title VARCHAR(200) NOT NULL, PRIMARY KEY(id))',
-            'INSERT INTO books (id, title) SELECT id, title FROM __temp__books',
-            'DROP TABLE __temp__books',
-        );
+        // the table has exactly what the rebuild carries: a rename
+        $result = $this->withColumns($this->rebuild('id, title'), ['id', 'title']);
 
-        self::assertSame([], $fatal, 'a SQLite rebuild must not be reported as a filter failure');
-        self::assertCount(2, $destructive);
+        self::assertSame([], $result->fatal);
+        self::assertSame([], $result->destructive, 'nothing was lost, so nothing to consent to');
+        self::assertSame(['BOOKS'], $result->rebuiltTables);
+    }
+
+    /**
+     * The one that matters. DBAL omits a dropped column from every
+     * statement, so a drop and a rename are textually identical — the
+     * only thing that tells them apart is what the table holds now.
+     */
+    #[Test]
+    public function a_rebuild_that_leaves_an_existing_column_behind_is_destructive(): void
+    {
+        // identical SQL to the test above; only the table differs
+        $result = $this->withColumns($this->rebuild('id, title'), ['id', 'title', 'subtitle']);
+
+        self::assertSame([], $result->fatal);
+        self::assertCount(2, $result->destructive);
+        self::assertSame([], $result->rebuiltTables);
+    }
+
+    #[Test]
+    public function without_knowing_the_table_no_rebuild_is_called_lossless(): void
+    {
+        // no column information at all — the safe answer is the old one
+        $result = (new StatementClassifier(self::OWNED))->classify($this->rebuild('id, title'));
+
+        self::assertCount(2, $result->destructive);
+        self::assertSame([], $result->rebuiltTables);
+    }
+
+    /**
+     * The parser refuses to guess. Anything it cannot read as a plain
+     * column list falls through to the ordinary rules, because claiming
+     * "nothing was lost" wrongly is far worse than an extra prompt.
+     */
+    #[Test]
+    public function an_unreadable_column_list_falls_back_to_destructive(): void
+    {
+        foreach (['*', 'id, COALESCE(title, 0)', "id, 'literal'"] as $unreadable) {
+            $result = $this->withColumns($this->rebuild($unreadable), ['id', 'title']);
+
+            self::assertCount(2, $result->destructive, "list: {$unreadable}");
+            self::assertSame([], $result->rebuiltTables);
+        }
+    }
+
+    #[Test]
+    public function rebuild_detection_survives_lowercase_and_quoted_identifiers(): void
+    {
+        $result = $this->withColumns([
+            'create temporary table __temp__books as select "id", "title" from "books"',
+            'drop table "books"',
+            'insert into "books" ("id", "name") select "id", "title" from __temp__books',
+            'drop table __temp__books',
+        ], ['ID', 'Title']);
+
+        self::assertSame([], $result->destructive);
+        self::assertSame(['BOOKS'], $result->rebuiltTables);
     }
 
     #[Test]

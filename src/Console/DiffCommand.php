@@ -43,9 +43,10 @@ final class DiffCommand extends Command
 
         $sql = (new SchemaTool($em))->getUpdateSchemaSql($metadata);
 
-        $classified = (new StatementClassifier(
-            array_map(static fn ($meta): string => $meta->getTableName(), $metadata),
-        ))->classify($sql);
+        $tables = array_map(static fn ($meta): string => $meta->getTableName(), $metadata);
+
+        $classified = (new StatementClassifier($tables, $this->currentColumns($em, $tables)))
+            ->classify($sql);
 
         if ($classified->fatal !== []) {
             $this->components->error('The diff drops a table no entity maps — the schema filter is not working:');
@@ -64,10 +65,19 @@ final class DiffCommand extends Command
                 $this->line('  '.$statement);
             }
             $this->newLine();
-            $this->line('  If the loss is intended (a removed column, or a SQLite table rebuild),');
-            $this->line('  run again with --allow-destructive. down() is empty, so there is no rollback.');
+            $this->line('  If the loss is intended, run again with --allow-destructive.');
+            $this->line('  down() is empty, so there is no rollback.');
 
             return self::FAILURE;
+        }
+
+        foreach ($classified->rebuiltTables as $table) {
+            // Worth saying out loud — SQLite rebuilds drop and recreate the
+            // table, so triggers and views attached to it do not survive —
+            // but not worth a prompt, because the rows do.
+            $this->components->info(
+                sprintf('Rebuilt in place: %s (every column carried across)', $table),
+            );
         }
 
         foreach ($classified->warnings as $statement) {
@@ -96,6 +106,38 @@ final class DiffCommand extends Command
         $this->components->info('Generated: '.$path);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The columns each mapped table has right now.
+     *
+     * A SQLite rebuild cannot be judged from the SQL alone — dropping a
+     * column and renaming one produce identical statements — so the
+     * classifier is given the current shape of the table to compare
+     * against. Tables that do not exist yet are simply absent, and a
+     * rebuild is never claimed lossless without this.
+     *
+     * @param  list<string>  $tables
+     * @return array<string, list<string>>
+     */
+    private function currentColumns(EntityManagerInterface $em, array $tables): array
+    {
+        $schema = $em->getConnection()->createSchemaManager();
+        $existing = array_map('strtolower', $schema->listTableNames());
+        $columns = [];
+
+        foreach ($tables as $table) {
+            if (! in_array(strtolower($table), $existing, true)) {
+                continue;
+            }
+
+            $columns[$table] = array_values(array_map(
+                static fn ($column): string => $column->getName(),
+                $schema->listTableColumns($table),
+            ));
+        }
+
+        return $columns;
     }
 
     /** @param list<string> $sql */

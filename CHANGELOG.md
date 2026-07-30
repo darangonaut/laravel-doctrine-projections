@@ -4,6 +4,29 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-07-30
+
+### Changed
+
+- **Renaming a column on SQLite no longer requires `--allow-destructive`.**
+  SQLite has no `ALTER COLUMN`, so a rename is a table rebuild, and every
+  rebuild was treated as data loss. `doctrine:diff` now reads the columns
+  the table currently has and passes the rebuild when every one of them is
+  carried across, reporting `Rebuilt in place: <table>`. A rebuild that
+  leaves a column behind still needs the flag.
+
+  The check compares against the live table on purpose. Comparing what the
+  rebuild saves against what it restores is tautological — DBAL parks
+  exactly what it means to carry, and omits a dropped column from the SQL
+  entirely, so a drop and a rename are textually identical. That first
+  attempt would have waved real data loss through; the integration test
+  against real `SchemaTool` output is what caught it.
+
+- `StatementClassifier` takes an optional second argument, a map of table
+  to its current columns. Without it no rebuild is ever called lossless,
+  so existing callers keep the old, safe behaviour.
+- `ClassifiedStatements` gained `rebuiltTables`.
+
 ## [0.1.1] — 2026-07-30
 
 ### Fixed
@@ -54,5 +77,6 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.2.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.2.0
 [0.1.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.1.1
 [0.1.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.1.0

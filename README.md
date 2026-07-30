@@ -189,10 +189,38 @@ Every statement is classified:
 | fatal | `DROP TABLE` on an **unmapped** table, `DROP DATABASE` | always refused — your schema filter is broken |
 | destructive | `ALTER … DROP <column>`, `TRUNCATE`, `DROP TABLE` on a mapped table | needs `--allow-destructive`; `down()` is empty, so there is no rollback |
 | warning | `DROP INDEX`, `DROP FOREIGN KEY`, `CHANGE`/`MODIFY`, pgsql `DROP NOT NULL` | passes, printed for review |
+| clean | a SQLite rebuild that carries every existing column across | passes, one line saying which table was rebuilt |
 
 `DROP TABLE` is not blanket-fatal on purpose: SQLite cannot alter a column
 except by rebuilding the table, so DBAL emits it routinely there. What
 matters is whether an entity maps the table.
+
+### Renaming a column on SQLite
+
+SQLite has no `ALTER COLUMN`, so renaming one means rebuilding the table:
+park the rows in a scratch table, drop, recreate, put them back. Read one
+statement at a time that is indistinguishable from total loss, which is
+why a rename used to demand `--allow-destructive` for a migration that
+loses nothing.
+
+It no longer does. Before deciding, the command reads the columns the
+table actually has and checks that the rebuild parks every one of them:
+
+```
+INFO  Rebuilt in place: tasks (every column carried across)
+```
+
+Drop a column and one is missing from that list, so the prompt comes back.
+
+The comparison is deliberately **not** between what the rebuild saves and
+what it restores — those always match, because DBAL parks exactly what it
+means to carry. A dropped column simply never appears in the SQL at all,
+making a drop and a rename textually identical. Only the live table tells
+them apart, so without that information nothing is called lossless.
+
+One thing a rebuild does not preserve, whatever the classifier says: it
+drops and recreates the table, so triggers and views attached to it are
+gone afterwards. That is SQLite, not this package.
 
 Generated migrations are **raw SQL and therefore driver-specific** — output
 generated on MySQL will not run on SQLite.
