@@ -381,6 +381,27 @@ final class ProjectionGenerator
                 continue;
             }
 
+            // `indexBy` keys the collection by a field. An Eloquent
+            // relation always returns 0..n and has no hook to change that
+            // which would survive regeneration, so the two sides disagree
+            // about the keys — `$config->settings['timezone']` is the
+            // entity on one side and null on the other.
+            $field = $this->indexedBy($assoc);
+
+            if ($field !== null) {
+                $target = $this->em->getClassMetadata($assoc->targetEntity);
+
+                $warnings[] = sprintf(
+                    'Relation %s::$%s is indexed by "%s"; an Eloquent relation cannot be, so it '
+                    ."returns a list where the entity returns a map. Use ->keyBy('%s') at the "
+                    .'call site if you need the keys.',
+                    class_basename($meta->getName()),
+                    $name,
+                    $field,
+                    $target->hasField($field) ? $target->getColumnName($field) : $field,
+                );
+            }
+
             $out .= $this->relation($name, $assoc);
         }
 
@@ -616,6 +637,23 @@ final class ProjectionGenerator
             $joinTable->inverseJoinColumns[0]->name,
             $joinTable->joinColumns[0]->name,
         ];
+    }
+
+    /**
+     * The field a to-many collection is keyed by, if any.
+     *
+     * Doctrine offers `isIndexed()` for this, but its interface carries
+     * `@phpstan-assert-if-true string $this->indexBy()` while `indexBy()`
+     * is already natively `string` — so an honest check reads as
+     * always-true to static analysis, with no setting to turn that off.
+     * The mapping's array form answers the same question without the
+     * annotation in the way.
+     */
+    private function indexedBy(AssociationMapping $assoc): ?string
+    {
+        $indexBy = $assoc->toArray()['indexBy'] ?? null;
+
+        return is_string($indexBy) && $indexBy !== '' ? $indexBy : null;
     }
 
     /**

@@ -395,6 +395,12 @@ than one that refuses:
   would be unusable, so the column name is what is emitted.
 - **Doctrine filters and second-level cache** do not apply to projections.
   They query the table directly.
+- **`indexBy` on a collection** cannot be carried across. Doctrine hands
+  back a map keyed by the field; an Eloquent relation is always a list,
+  with no hook to change that which survives regeneration. So
+  `$config->settings['timezone']` is the setting through the entity and
+  null through the projection. Generation warns and tells you the column
+  to `keyBy()` at the call site.
 
 ## Requirements
 

@@ -115,6 +115,20 @@ final class Compare
                     sprintf('%s::$%s returns different rows, or a different order, than its projection', $entityClass, $name),
                 );
 
+                // Keys too, unless the mapping indexes the collection —
+                // Eloquent relations are always 0..n and the generator
+                // warns about that rather than pretending otherwise.
+                // Read from the array form: `isIndexed()` carries an
+                // assertion its own native return type already satisfies,
+                // so calling it reads as always-true to static analysis.
+                if (($assoc->toArray()['indexBy'] ?? null) === null) {
+                    Assert::assertSame(
+                        array_keys(iterator_to_array($collection)),
+                        array_keys(iterator_to_array($related)),
+                        sprintf('%s::$%s is keyed differently than its projection', $entityClass, $name),
+                    );
+                }
+
                 $compared++;
             }
         }
