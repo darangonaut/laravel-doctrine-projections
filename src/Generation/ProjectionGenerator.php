@@ -364,7 +364,7 @@ final class ProjectionGenerator
      */
     private function members(ClassMetadata $meta, array &$warnings): string
     {
-        $out = sprintf("    protected \$table = '%s';\n", $meta->getTableName());
+        $out = sprintf("    protected \$table = '%s';\n", $this->qualifiedTableName($meta));
         $out .= $this->keyMembers($meta, $warnings);
 
         // Doctrine manages timestamps itself.
@@ -726,6 +726,27 @@ final class ProjectionGenerator
             $joinTable->inverseJoinColumns[0]->name,
             $joinTable->joinColumns[0]->name,
         ];
+    }
+
+    /**
+     * The table, with its schema when the mapping names one.
+     *
+     * `getTableName()` returns the bare name, so an entity mapped to
+     * `archive.entries` produced `$table = 'entries'` — pointing at
+     * whatever `entries` the search path finds first. On PostgreSQL that
+     * is either an error or, worse, a different table with the same name.
+     * Eloquent's grammar quotes each dotted segment, so the qualified
+     * name is what it wants.
+     *
+     * @param  ClassMetadata<object>  $meta
+     */
+    private function qualifiedTableName(ClassMetadata $meta): string
+    {
+        $schema = $meta->getSchemaName();
+
+        return $schema === null || $schema === ''
+            ? $meta->getTableName()
+            : $schema.'.'.$meta->getTableName();
     }
 
     /**

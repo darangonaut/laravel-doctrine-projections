@@ -125,6 +125,7 @@ holds only until someone names a column differently.
 | non-integer key | `$keyType` + `$incrementing = false` |
 | composite key | `$primaryKey = null` **and a warning** — see below |
 | single table inheritance | a discriminator global scope on each subclass |
+| `#[ORM\Table(schema: …)]` | `$table = 'archive.entries'`, not the bare name |
 
 **Composite keys are refused, not guessed.** Eloquent has no support for
 them, so rather than silently picking the first column (which would make

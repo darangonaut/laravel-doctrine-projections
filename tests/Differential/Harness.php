@@ -61,6 +61,7 @@ final class Harness
 
         // A server keeps its schema between runs, unlike sqlite :memory:.
         (new SchemaTool($this->em))->dropSchema($metadata);
+        $this->dropQualifiedTables();
         (new SchemaTool($this->em))->createSchema($metadata);
 
         $this->loadProjections();
@@ -108,6 +109,28 @@ final class Harness
         );
 
         return $em;
+    }
+
+    /**
+     * `dropSchema()` leaves tables that live in a schema of their own —
+     * observed on MySQL, where the second run of a fixture mapped to
+     * `archive.entries` failed on "table already exists". Nothing in the
+     * package drops schemas, so this is the harness catching up rather
+     * than a fix.
+     */
+    private function dropQualifiedTables(): void
+    {
+        foreach (MappedTables::of($this->em) as $table) {
+            if (! str_contains($table, '.')) {
+                continue;
+            }
+
+            [$schema, $name] = explode('.', $table, 2);
+
+            $this->em->getConnection()->executeStatement(
+                sprintf('DROP TABLE IF EXISTS %s.%s', $schema, $name),
+            );
+        }
     }
 
     /**

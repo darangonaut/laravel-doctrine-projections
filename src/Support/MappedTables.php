@@ -43,7 +43,15 @@ final class MappedTables
         $tables = [];
 
         foreach ($metadata as $meta) {
-            $tables[] = $meta->getTableName();
+            $schema = $meta->getSchemaName();
+
+            // DBAL names an asset by its schema when the mapping does, so
+            // a filter built from bare names would hide a table the
+            // mapping owns — and `doctrine:diff` would then read the DDL
+            // for it as touching something nobody maps.
+            $tables[] = $schema === null || $schema === ''
+                ? $meta->getTableName()
+                : $schema.'.'.$meta->getTableName();
 
             foreach ($meta->associationMappings as $association) {
                 // only the owning side carries the join table definition
