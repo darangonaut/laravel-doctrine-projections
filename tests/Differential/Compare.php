@@ -6,6 +6,8 @@ namespace Darangonaut\DoctrineProjections\Tests\Differential;
 
 use BackedEnum;
 use DateTimeInterface;
+use Doctrine\DBAL\Types\Type;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\ToManyAssociationMapping;
 use Illuminate\Database\Eloquent\Model;
@@ -46,7 +48,7 @@ final class Compare
                 $column = $meta->getColumnName($field);
 
                 Assert::assertSame(
-                    $this->normalise($meta->getFieldValue($entity, $field)),
+                    $this->columnValueOf($meta, $entity, $field),
                     $this->normalise($model->getAttribute($column)),
                     sprintf('%s::$%s (column %s) differs between the entity and its projection', $entityClass, $field, $column),
                 );
@@ -222,6 +224,35 @@ final class Compare
         }
 
         return $identity;
+    }
+
+    /**
+     * What the entity's value looks like in the column.
+     *
+     * A projection reads the column, so that is the only fair thing to
+     * compare it against. Usually the two are the same, but a custom
+     * Doctrine type converts on the way out — the entity holds a `Money`
+     * where the column holds `EUR 125000` — and Eloquent knows nothing
+     * about Doctrine's type registry. Asking the type what it would write
+     * keeps that difference from reading as a bug.
+     *
+     * @param  ClassMetadata<object>  $meta
+     */
+    private function columnValueOf(ClassMetadata $meta, object $entity, string $field): mixed
+    {
+        $value = $meta->getFieldValue($entity, $field);
+
+        // Dates and enums are handled below, on both sides at once.
+        if (! is_object($value) || $value instanceof DateTimeInterface || $value instanceof BackedEnum) {
+            return $this->normalise($value);
+        }
+
+        $platform = $this->harness->em()->getConnection()->getDatabasePlatform();
+
+        return $this->normalise(
+            Type::getType($meta->getTypeOfField($field) ?? Types::STRING)
+                ->convertToDatabaseValue($value, $platform),
+        );
     }
 
     /**

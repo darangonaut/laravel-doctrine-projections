@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
+use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\Mapping\ClassMetadata;
@@ -50,6 +51,9 @@ final class ProjectionGenerator
 
     /** @var list<string>|null names Eloquent's Model already uses */
     private ?array $modelProperties = null;
+
+    /** @var list<string>|null the type names DBAL ships */
+    private ?array $builtInTypes = null;
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -338,6 +342,8 @@ final class ProjectionGenerator
             if ($cast !== null) {
                 $casts[$meta->getColumnName($field)] = $cast;
             }
+
+            $this->warnAboutCustomType($meta, $field, $warnings);
         }
 
         if ($casts !== []) {
@@ -681,6 +687,46 @@ final class ProjectionGenerator
             $joinTable->inverseJoinColumns[0]->name,
             $joinTable->joinColumns[0]->name,
         ];
+    }
+
+    /**
+     * A type DBAL does not ship is one Eloquent cannot know about, so the
+     * projection reads whatever sits in the column while the entity hands
+     * back whatever `convertToPHPValue()` made of it.
+     *
+     * The generated docblock already says `string` rather than promising
+     * the value object, so this is visible to static analysis — but only
+     * to someone who looks. Saying it at generation is cheaper.
+     *
+     * Built-ins come from DBAL's own `Types` constants, so the list
+     * cannot fall behind the library.
+     *
+     * @param  ClassMetadata<object>  $meta
+     * @param  list<string>  $warnings
+     */
+    private function warnAboutCustomType(ClassMetadata $meta, string $field, array &$warnings): void
+    {
+        $type = $meta->getTypeOfField($field);
+
+        if (! is_string($type)) {
+            return;
+        }
+
+        $this->builtInTypes ??= array_values(array_filter(
+            (new ReflectionClass(Types::class))->getConstants(),
+            'is_string',
+        ));
+
+        if (in_array($type, $this->builtInTypes, true)) {
+            return;
+        }
+
+        $warnings[] = sprintf(
+            'Column "%s" uses the custom Doctrine type "%s". The projection reads the stored '
+            .'value; only the entity gets what convertToPHPValue() makes of it.',
+            $meta->getColumnName($field),
+            $type,
+        );
     }
 
     /**

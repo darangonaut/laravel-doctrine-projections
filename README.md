@@ -389,9 +389,13 @@ than one that refuses:
 
 - **Class table inheritance** — refused with an error (see above).
 - **Custom Doctrine types** get no cast, so they read back as the raw
-  column value. Add a cast by hand in the host app if you need one — but
-  remember the directory is regenerated, so it belongs in a subclass or an
-  accessor elsewhere, not in the generated file.
+  column value: the entity hands back whatever `convertToPHPValue()` made
+  of it, the projection hands back what the column holds. Generation warns
+  and the docblock says `string` rather than promising the value object,
+  so the difference is visible to static analysis. Add a cast by hand in
+  the host app if you need one — but remember the directory is
+  regenerated, so it belongs in a subclass or an accessor elsewhere, not
+  in the generated file.
 - **Mapped superclasses** are skipped: they have no table of their own.
 - **Embeddables** get no projection of their own either, but their
   columns do appear on whatever embeds them, under their column names —
