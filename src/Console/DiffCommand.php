@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Darangonaut\DoctrineProjections\Console;
 
+use Darangonaut\DoctrineProjections\Exceptions\MigrationExists;
 use Darangonaut\DoctrineProjections\Schema\StatementClassifier;
 use Darangonaut\DoctrineProjections\Support\Config;
 use Darangonaut\DoctrineProjections\Support\MappedTables;
@@ -105,7 +106,14 @@ final class DiffCommand extends Command
             return self::SUCCESS;
         }
 
-        $path = $this->write($sql, $this->hasTransactionalDdl($em));
+        try {
+            $path = $this->write($sql, $this->hasTransactionalDdl($em));
+        } catch (MigrationExists $e) {
+            $this->components->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $this->components->info('Generated: '.$path);
 
         return self::SUCCESS;
@@ -172,6 +180,12 @@ final class DiffCommand extends Command
         $name = preg_replace('/[^a-z0-9_]/', '_', strtolower(is_string($option) ? $option : '')) ?: 'doctrine_diff';
         $dir = Config::string('doctrine-projections.diff.path');
         $path = sprintf('%s/%s_%s.php', rtrim($dir, '/'), date('Y_m_d_His'), $name);
+
+        // Overwriting would throw away a migration that was already
+        // generated and possibly already edited.
+        if (File::exists($path)) {
+            throw MigrationExists::at($path);
+        }
 
         $indent = $atomic ? '            ' : '        ';
 

@@ -343,6 +343,13 @@ ERROR  Projections do not match the mapping:
 Generated migrations are **raw SQL and therefore driver-specific** — output
 generated on MySQL will not run on SQLite.
 
+The file name is the timestamp to the second plus `--name`, so a second
+run inside the same second with the same name is refused rather than
+replacing the first.
+
+`doctrine:projections` needs no database at all — it reads mapping, not
+schema. `doctrine:diff` does, since it compares against what is there.
+
 ### Restricting the schema filter
 
 `doctrine:diff` refuses to drop tables no entity maps, but that is a
