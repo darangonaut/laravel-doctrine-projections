@@ -12,6 +12,7 @@ use Darangonaut\DoctrineProjections\Support\Config;
 use Doctrine\ORM\EntityManagerInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
+use Throwable;
 
 /**
  * Thin wrapper: the generator does the work, this handles the console and
@@ -90,7 +91,26 @@ final class GenerateProjectionsCommand extends Command
 
         foreach ($projections as $projection) {
             if (! $this->option('dry')) {
-                File::put($path.'/'.$projection->className.'.php', $projection->code);
+                $file = $path.'/'.$projection->className.'.php';
+
+                // A failed write reports itself two different ways: as a
+                // raw ErrorException under Laravel's error handler, and as
+                // a plain `false` without it. Neither was looked at, so a
+                // run that wrote nothing could still exit 0 — a green
+                // deploy over an application left without models.
+                try {
+                    $written = File::put($file, $projection->code);
+                } catch (Throwable $e) {
+                    $this->components->error(sprintf('Could not write %s: %s', $file, $e->getMessage()));
+
+                    return self::FAILURE;
+                }
+
+                if ($written === false) {
+                    $this->components->error('Could not write '.$file.'. Is the directory writable?');
+
+                    return self::FAILURE;
+                }
             }
 
             $this->components->twoColumnDetail(

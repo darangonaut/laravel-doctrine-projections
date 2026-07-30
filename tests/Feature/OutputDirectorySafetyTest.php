@@ -106,6 +106,59 @@ final class OutputDirectorySafetyTest extends TestCase
         self::assertSame("*\n", File::get($this->output.'/.gitignore'));
     }
 
+    /**
+     * `File::put()` returns false rather than throwing, and the result was
+     * not looked at — so a run that wrote nothing still printed
+     * "3 projection(s) generated" and exited 0. On a deploy that is a
+     * green build over an application left without models.
+     */
+    #[Test]
+    public function a_write_that_fails_is_reported_as_a_failure(): void
+    {
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        foreach (array_filter(File::glob($this->output.'/*.php'), is_string(...)) as $file) {
+            File::delete($file);
+        }
+
+        chmod($this->output, 0555);
+
+        try {
+            $this->command('doctrine:projections')->assertFailed();
+
+            self::assertSame([], File::glob($this->output.'/*.php'), 'and nothing was written');
+        } finally {
+            chmod($this->output, 0755);
+        }
+    }
+
+    /**
+     * A symlinked output directory is ordinary usage — a build step
+     * pointing at a shared location — and the guard reads through it.
+     */
+    #[Test]
+    public function a_symlinked_output_directory_works(): void
+    {
+        $real = $this->output.'-real';
+        $link = $this->output.'-link';
+
+        File::ensureDirectoryExists($real);
+        @unlink($link);
+        symlink($real, $link);
+
+        config()->set('doctrine-projections.path', $link);
+
+        try {
+            $this->command('doctrine:projections')->assertSuccessful();
+            $this->command('doctrine:projections --check')->assertSuccessful();
+
+            self::assertFileExists($real.'/Account.php', 'the file lands in the real directory');
+        } finally {
+            @unlink($link);
+            File::deleteDirectory($real);
+        }
+    }
+
     #[Test]
     public function the_check_run_never_deletes_anything(): void
     {
