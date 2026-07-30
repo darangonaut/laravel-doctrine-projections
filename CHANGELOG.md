@@ -4,7 +4,9 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.0] — 2026-07-30
+
+First release.
 
 ### Added
 
@@ -35,3 +37,5 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   rather than silently reduced to the first column.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
+
+[0.1.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.1.0
