@@ -421,6 +421,17 @@ If a filter is enabled while generating, the command says so. Otherwise:
 apply the same condition at the call site, exclude those entities from
 generation, or accept that the projection sees every row.
 
+### Under `Model::shouldBeStrict()`
+
+Generated projections run fine under all three guards, and the write lock
+still wins: `delete()` reports being read-only, not a strict-mode
+violation.
+
+One thing worth knowing before you conclude a projection is exempt:
+Laravel arms the lazy-loading guard only when it hydrates **more than one
+row** (`Builder::hydrate()`), so a relation reached from a single
+`first()` will not be flagged.
+
 ## What is not covered
 
 Being explicit about the edges, since a generator that guesses is worse
