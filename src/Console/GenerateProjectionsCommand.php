@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Console;
 
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
+use Darangonaut\DoctrineProjections\Generation\EntityFilter;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Darangonaut\DoctrineProjections\Support\Config;
@@ -34,7 +35,7 @@ final class GenerateProjectionsCommand extends Command
         $path = Config::string('doctrine-projections.path');
 
         try {
-            $projections = (new ProjectionGenerator($em, $namespace))->generate();
+            $projections = (new ProjectionGenerator($em, $namespace, self::filter()))->generate();
         } catch (DuplicateProjectionName $e) {
             $this->components->error($e->getMessage());
 
@@ -83,6 +84,24 @@ final class GenerateProjectionsCommand extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    private static function filter(): EntityFilter
+    {
+        return new EntityFilter(
+            self::patterns('doctrine-projections.entities.only'),
+            self::patterns('doctrine-projections.entities.except'),
+        );
+    }
+
+    /** @return list<string> */
+    private static function patterns(string $key): array
+    {
+        $value = config($key, []);
+
+        return is_array($value)
+            ? array_values(array_filter($value, is_string(...)))
+            : [];
     }
 
     /** @return list<string> */

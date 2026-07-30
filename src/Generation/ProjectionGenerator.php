@@ -40,9 +40,13 @@ final class ProjectionGenerator
     /** Imports for the class currently being rendered. */
     private Imports $imports;
 
+    /** @var list<string> entity classes that will get a projection */
+    private array $projected = [];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly string $namespace,
+        private readonly EntityFilter $filter = new EntityFilter,
     ) {}
 
     /**
@@ -58,7 +62,9 @@ final class ProjectionGenerator
 
         $metadata = array_values(array_filter(
             $this->em->getMetadataFactory()->getAllMetadata(),
-            static fn (ClassMetadata $meta): bool => ! $meta->isMappedSuperclass && ! $meta->isEmbeddedClass,
+            fn (ClassMetadata $meta): bool => ! $meta->isMappedSuperclass
+                && ! $meta->isEmbeddedClass
+                && $this->filter->accepts($meta->getName()),
         ));
 
         $this->guardAgainstUnsupportedInheritance($metadata);
@@ -66,6 +72,14 @@ final class ProjectionGenerator
 
         $this->reserved = array_map(
             static fn (ClassMetadata $meta): string => class_basename($meta->getName()),
+            $metadata,
+        );
+
+        // Relations pointing at an entity nobody projected would reference
+        // a class that does not exist, so they have to be skipped — see
+        // relationsFor().
+        $this->projected = array_map(
+            static fn (ClassMetadata $meta): string => $meta->getName(),
             $metadata,
         );
 
@@ -190,6 +204,10 @@ final class ProjectionGenerator
         }
 
         foreach ($meta->getAssociationMappings() as $name => $assoc) {
+            if (! $this->isProjected($assoc->targetEntity)) {
+                continue;
+            }
+
             $target = class_basename($assoc->targetEntity);
             $property = Str::snake($name);
 
@@ -264,10 +282,26 @@ final class ProjectionGenerator
         $out .= $this->discriminatorScope($meta);
 
         foreach ($meta->getAssociationMappings() as $name => $assoc) {
+            if (! $this->isProjected($assoc->targetEntity)) {
+                $warnings[] = sprintf(
+                    'Skipped relation %s::$%s — %s has no projection, so there would be nothing to point at.',
+                    class_basename($meta->getName()),
+                    $name,
+                    class_basename($assoc->targetEntity),
+                );
+
+                continue;
+            }
+
             $out .= $this->relation($name, $assoc);
         }
 
         return $out;
+    }
+
+    private function isProjected(string $entityClass): bool
+    {
+        return in_array($entityClass, $this->projected, true);
     }
 
     /**

@@ -23,6 +23,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   change the committed files.
 - Optional `SharedPdoDriver` so Doctrine can run on Laravel's own PDO.
 - PHPStan at level max in CI, with no baseline and no suppressions.
+- `entities.only` / `entities.except` config to choose what gets projected;
+  relations to excluded entities are skipped with a warning rather than
+  emitted as references to classes that do not exist.
 
 ### Refused on purpose
 

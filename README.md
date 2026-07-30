@@ -62,6 +62,21 @@ Configure where they land in `config/doctrine-projections.php`:
 'path'      => app_path('Models/Projections'),
 ```
 
+### Choosing which entities to project
+
+```php
+'entities' => [
+    'only'   => [],                          // empty means all of them
+    'except' => ['App\\Entity\\Legacy\\*'],
+],
+```
+
+Patterns are matched with `fnmatch()` against the fully qualified class
+name. A relation pointing at an entity you excluded is **skipped with a
+warning naming it** — a projection cannot reference a class that was never
+generated, and emitting one anyway would produce a file that fatals on
+first use.
+
 The output directory is wiped on every run — treat it as build output.
 Commit it if you want the models browsable, or gitignore it and generate on
 deploy. Either works, as long as generation runs **right after `migrate`**:
@@ -245,14 +260,18 @@ owning side, which is the same shape as the bug that once crashed the
 generator on the inverse side of a OneToOne.
 
 
-The suite is deliberately split:
+66 tests, in three parts:
 
 generation and SQL classification are pure transformations and run without
-a database, while the lock and the inheritance scope are verified against
-real SQLite — the lock by attempting all 23 write paths, the scope by
-writing the generated files out, loading them and querying a table that
-holds rows of every subclass. Asserting on emitted strings would have
-passed just as happily while the scope did nothing.
+a database; the lock and the inheritance scope are verified against real
+SQLite — the lock by attempting all 23 write paths, the scope by writing
+the generated files out, loading them and querying a table that holds rows
+of every subclass; and the commands run through a real Laravel application
+via Testbench, so the service provider and config are exercised rather than
+assumed.
+
+Asserting on emitted strings would have passed just as happily while the
+scope did nothing, which is why the middle group exists.
 
 ## License
 

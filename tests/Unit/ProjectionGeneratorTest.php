@@ -6,6 +6,7 @@ namespace Darangonaut\DoctrineProjections\Tests\Unit;
 
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
+use Darangonaut\DoctrineProjections\Generation\EntityFilter;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Darangonaut\DoctrineProjections\Tests\EntityManagerFactory;
@@ -29,11 +30,12 @@ final class ProjectionGeneratorTest extends TestCase
     private const string NAMESPACE = 'App\\Models\\Projections';
 
     /** @return array<string, RenderedProjection> */
-    private function generate(string $fixtureDir = 'Entities'): array
+    private function generate(string $fixtureDir = 'Entities', ?EntityFilter $filter = null): array
     {
         return (new ProjectionGenerator(
             EntityManagerFactory::forFixtures($fixtureDir),
             self::NAMESPACE,
+            $filter ?? EntityFilter::everything(),
         ))->generate();
     }
 
@@ -171,6 +173,57 @@ final class ProjectionGeneratorTest extends TestCase
         $this->expectExceptionMessageMatches('/JOINED/');
 
         $this->generate('Joined');
+    }
+
+    #[Test]
+    public function only_narrows_generation_to_the_listed_entities(): void
+    {
+        $projections = $this->generate('Entities', new EntityFilter(
+            only: ['*\\Entities\\Document'],
+        ));
+
+        self::assertSame(['Document'], array_keys($projections));
+    }
+
+    #[Test]
+    public function except_removes_entities_after_only(): void
+    {
+        $projections = $this->generate('Entities', new EntityFilter(
+            except: ['*\\Entities\\Enrollment', '*\\Entities\\Document'],
+        ));
+
+        $names = array_keys($projections);
+        sort($names);
+
+        self::assertSame(['Account', 'Profile'], $names);
+    }
+
+    /**
+     * A relation pointing at an entity nobody projected would reference a
+     * class that was never generated. Skipping it keeps the projection
+     * loadable; the warning says why the relation is missing.
+     */
+    #[Test]
+    public function relations_to_excluded_entities_are_skipped_with_a_warning(): void
+    {
+        $projections = $this->generate('Entities', new EntityFilter(
+            except: ['*\\Entities\\Profile'],
+        ));
+
+        $account = $projections['Account'];
+
+        self::assertArrayNotHasKey('Profile', $projections);
+        self::assertStringNotContainsString('Profile::class', $account->code);
+        self::assertStringNotContainsString('@property Profile', $account->code);
+
+        self::assertCount(1, $account->warnings);
+        self::assertStringContainsString('Skipped relation Account::$profile', $account->warnings[0]);
+    }
+
+    #[Test]
+    public function excluding_everything_yields_nothing_rather_than_broken_output(): void
+    {
+        self::assertSame([], $this->generate('Entities', new EntityFilter(except: ['*'])));
     }
 
     #[Test]

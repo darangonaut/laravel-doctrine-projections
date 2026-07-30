@@ -5,13 +5,17 @@
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
-        <!-- Generovanie a klasifikácia SQL sú čisté transformácie — bez databázy. -->
+        <!-- Generation and SQL classification are pure transformations. -->
         <testsuite name="unit">
             <directory>tests/Unit</directory>
         </testsuite>
-        <!-- Zámok sa dá overiť len skutočným pokusom o zápis; SQLite in-memory. -->
+        <!-- The lock can only be verified by actually attempting writes. -->
         <testsuite name="integration">
             <directory>tests/Integration</directory>
+        </testsuite>
+        <!-- Commands through a real Laravel application (testbench). -->
+        <testsuite name="feature">
+            <directory>tests/Feature</directory>
         </testsuite>
     </testsuites>
     <source>

@@ -22,6 +22,25 @@ return [
 
     /*
     |---------------------------------------------------------------------
+    | Which entities get a projection
+    |---------------------------------------------------------------------
+    |
+    | Patterns are matched with fnmatch() against the fully qualified class
+    | name. Leave `only` empty to project every mapped entity.
+    |
+    | A relation pointing at an entity you excluded is skipped, with a
+    | warning naming it — a projection cannot reference a class that was
+    | never generated.
+    |
+    */
+
+    'entities' => [
+        'only' => [],
+        'except' => [],
+    ],
+
+    /*
+    |---------------------------------------------------------------------
     | Migration generation (doctrine:diff)
     |---------------------------------------------------------------------
     |
