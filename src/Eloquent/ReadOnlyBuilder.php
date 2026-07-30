@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Eloquent;
 
 use Darangonaut\DoctrineProjections\Exceptions\ReadOnlyProjection;
+use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
+use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Model events only guard instance-level writes (save, update, delete on a
@@ -162,6 +165,49 @@ class ReadOnlyBuilder extends Builder
     public function truncate(): never
     {
         $this->refuse('truncate');
+    }
+
+    /**
+     * A composite-key projection has no `$primaryKey`, so `find()` builds
+     * `where seats. = 1` and the caller gets `no such column: seats.`
+     * plus a PHP deprecation from inside Eloquent. Refusing up front says
+     * what is actually wrong and what to do instead.
+     *
+     * @param  mixed  $id
+     * @param  array<int, string>  $columns
+     */
+    public function find($id, $columns = ['*']): mixed
+    {
+        $this->guardAgainstCompositeKey('find');
+
+        return parent::find($id, $columns);
+    }
+
+    /**
+     * @param  Arrayable<array-key, mixed>|array<int, mixed>  $ids
+     * @param  array<int, string>  $columns
+     */
+    public function findMany($ids, $columns = ['*']): Collection
+    {
+        $this->guardAgainstCompositeKey('findMany');
+
+        return parent::findMany($ids, $columns);
+    }
+
+    /**
+     * The comparison is against an empty string rather than null on
+     * purpose: Laravel declares `getKeyName(): string`, so static analysis
+     * rules out the null a composite-key projection actually has. Casting
+     * covers both, and a blank key name is just as unusable as a missing
+     * one.
+     */
+    private function guardAgainstCompositeKey(string $operation): void
+    {
+        if ((string) $this->getModel()->getKeyName() !== '') {
+            return;
+        }
+
+        throw UnsupportedMapping::compositeKeyLookup($operation, $this->getModel()::class);
     }
 
     private function refuse(string $operation): never

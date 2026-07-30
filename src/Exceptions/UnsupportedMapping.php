@@ -26,6 +26,25 @@ final class UnsupportedMapping extends RuntimeException
     }
 
     /**
+     * Eloquent addresses a row by one column. With a composite key there
+     * is no such column, and the generated projection says so with
+     * `$primaryKey = null` — at which point `find()` composes
+     * `where seats. = 1` and fails with `no such column: seats.`, which
+     * tells the caller nothing.
+     */
+    public static function compositeKeyLookup(string $operation, string $model): self
+    {
+        return new self(sprintf(
+            '%s::%s() cannot work: %s projects an entity with a composite primary key, '
+            .'which Eloquent cannot address. Query it by its key columns instead, '
+            .'for example ->where([...])->first().',
+            $model,
+            $operation,
+            $model,
+        ));
+    }
+
+    /**
      * Doctrine's mapping classes split by side, and the resolution above
      * assumes the counterpart of an inverse side is an owning side of the
      * matching kind. If that ever fails, guessing would be worse than

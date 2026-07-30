@@ -4,6 +4,33 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`delete()` on a composite-key projection now throws
+  `ReadOnlyProjection`** instead of Laravel's
+  `LogicException: No primary key defined on model`. Laravel checks for a
+  primary key *before* firing the `deleting` event the lock hangs off, so
+  the write was refused for the wrong reason and with an exception the
+  package does not document. The trait overrides `delete()` directly, so
+  every projection now refuses the same way whatever its key looks like.
+
+- **`find()` and `findMany()` on a composite-key projection explain
+  themselves.** With no `$primaryKey` they composed `where seats. = 1`
+  and returned `no such column: seats.`, plus a PHP deprecation raised
+  inside Eloquent. They now throw `UnsupportedMapping` naming the model
+  and pointing at `->where([...])`.
+
+### Documented
+
+- Embeddables were listed only as "skipped". They get no projection of
+  their own, but their columns appear on the embedding entity under their
+  column names — `billing_street`, or bare `street` with
+  `columnPrefix: false`. Now covered by tests, since Doctrine calls that
+  field `billing.street` and emitting *that* would produce a property
+  nobody can use.
+
 ## [0.3.0] — 2026-07-30
 
 Everything here came out of walking through schema changes one at a time

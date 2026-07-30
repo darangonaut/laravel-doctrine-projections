@@ -35,6 +35,19 @@ trait ReadOnlyModel
     }
 
     /**
+     * The `deleting` event above covers this on an ordinary projection,
+     * but not on one with a composite key: Laravel's delete() throws
+     * `LogicException: No primary key defined on model` *before* it fires
+     * any event, so the write was refused for the wrong reason and with
+     * the wrong exception type. Refusing here means every projection
+     * refuses the same way, whatever its key looks like.
+     */
+    public function delete(): never
+    {
+        throw ReadOnlyProjection::attemptedTo('delete', static::class);
+    }
+
+    /**
      * Laravel annotates its own newEloquentBuilder() with the wildcard
      * generic too — the constructor takes a query builder and cannot
      * infer the model type from it.

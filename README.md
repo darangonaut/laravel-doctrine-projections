@@ -127,8 +127,20 @@ holds only until someone names a column differently.
 **Composite keys are refused, not guessed.** Eloquent has no support for
 them, so rather than silently picking the first column (which would make
 `find()` return an arbitrary row) the projection is emitted with
-`$primaryKey = null` and the command warns. Reading via `where()` works;
-`find()` and `getKey()` do not.
+`$primaryKey = null` and the command warns.
+
+Everything that does not need a single key column keeps working —
+`where()`, `count()`, `pluck()`, casts, eager loading:
+
+```php
+Seat::query()->where(['row_letter' => 'A', 'seat_number' => 2])->first();
+```
+
+`find()` and `findMany()` refuse with an explanation. They used to
+compose `where seats. = 1` and hand back `no such column: seats.` along
+with a PHP deprecation raised inside Eloquent, which told the caller
+nothing. `getKey()` still returns null, as Eloquent does for any model
+without a key.
 
 **Single table inheritance is scoped, not ignored.** Every subclass shares
 one table, so without a filter `CardPayment::all()` would hand back cash
@@ -341,8 +353,12 @@ than one that refuses:
   column value. Add a cast by hand in the host app if you need one — but
   remember the directory is regenerated, so it belongs in a subclass or an
   accessor elsewhere, not in the generated file.
-- **Embeddables and mapped superclasses** are skipped: they have no table
-  of their own.
+- **Mapped superclasses** are skipped: they have no table of their own.
+- **Embeddables** get no projection of their own either, but their
+  columns do appear on whatever embeds them, under their column names —
+  `billing_street`, or bare `street` when `columnPrefix: false`. Doctrine
+  calls that field `billing.street`; a generated property of that name
+  would be unusable, so the column name is what is emitted.
 - **Doctrine filters and second-level cache** do not apply to projections.
   They query the table directly.
 
