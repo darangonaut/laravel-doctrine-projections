@@ -74,10 +74,6 @@ final class Compare
             $model = $this->matching($meta, $entity, $projection);
 
             foreach ($meta->getAssociationMappings() as $name => $assoc) {
-                if (! $assoc instanceof ToManyAssociationMapping) {
-                    continue;
-                }
-
                 $method = Str::camel($name);
 
                 // relations the generator refused (unprojected target, or
@@ -87,6 +83,13 @@ final class Compare
                 }
 
                 $targetMeta = $this->harness->em()->getClassMetadata($assoc->targetEntity);
+
+                if (! $assoc instanceof ToManyAssociationMapping) {
+                    $this->toOne($entityClass, $name, $meta, $entity, $model, $method, $targetMeta);
+                    $compared++;
+
+                    continue;
+                }
 
                 $collection = $meta->getFieldValue($entity, $name);
                 $related = $model->getAttribute($method);
@@ -116,7 +119,45 @@ final class Compare
             }
         }
 
-        Assert::assertGreaterThan(0, $compared, "no to-many associations were compared for {$entityClass}");
+        Assert::assertGreaterThan(0, $compared, "no associations were compared for {$entityClass}");
+    }
+
+    /**
+     * A to-one that points at the wrong row looks exactly like one that
+     * points at the right row, so the identity is compared rather than
+     * the fact that something came back.
+     *
+     * @param  ClassMetadata<object>  $meta
+     * @param  ClassMetadata<object>  $targetMeta
+     */
+    private function toOne(
+        string $entityClass,
+        string $name,
+        ClassMetadata $meta,
+        object $entity,
+        Model $model,
+        string $method,
+        ClassMetadata $targetMeta,
+    ): void {
+        $related = $meta->getFieldValue($entity, $name);
+        $projected = $model->getAttribute($method);
+
+        $message = sprintf('%s::$%s points somewhere else than its projection does', $entityClass, $name);
+
+        if ($related === null) {
+            Assert::assertNull($projected, $message);
+
+            return;
+        }
+
+        Assert::assertIsObject($related);
+        Assert::assertInstanceOf(Model::class, $projected, $message);
+
+        Assert::assertSame(
+            $this->identityOf($targetMeta, $related),
+            $this->projectedIdentityOf($targetMeta, $projected),
+            $message,
+        );
     }
 
     /**
