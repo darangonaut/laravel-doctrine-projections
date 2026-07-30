@@ -17,6 +17,15 @@
         <testsuite name="feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!--
+            Doctrine and the projections on one database, answering the
+            same questions. Asserts they agree rather than asserting a
+            specific answer, so a mapping shape nobody wrote a test for
+            is still covered.
+        -->
+        <testsuite name="differential">
+            <directory>tests/Differential</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
