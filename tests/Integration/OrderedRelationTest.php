@@ -97,6 +97,25 @@ final class OrderedRelationTest extends TestCase
         return $class;
     }
 
+    /**
+     * @param  Collection<int, Model>  $tracks
+     * @return list<string>
+     */
+    private static function titles(Collection $tracks): array
+    {
+        $titles = [];
+
+        foreach ($tracks as $track) {
+            $title = $track->getAttribute('title');
+
+            self::assertIsString($title);
+
+            $titles[] = $title;
+        }
+
+        return $titles;
+    }
+
     /** @return list<string> */
     private function trackTitles(): array
     {
@@ -107,7 +126,7 @@ final class OrderedRelationTest extends TestCase
         /** @var Collection<int, Model> $tracks */
         $tracks = $album->getAttribute('tracks');
 
-        return $tracks->map(static fn (Model $t): string => (string) $t->getAttribute('title'))->all();
+        return self::titles($tracks);
     }
 
     #[Test]
@@ -143,14 +162,16 @@ final class OrderedRelationTest extends TestCase
     #[Test]
     public function eager_loading_orders_the_same_way(): void
     {
-        $albums = self::$album::query()->with('tracks')->get();
+        $album = self::$album::query()->with('tracks')->first();
+
+        self::assertNotNull($album);
 
         /** @var Collection<int, Model> $tracks */
-        $tracks = $albums->first()?->getAttribute('tracks');
+        $tracks = $album->getAttribute('tracks');
 
         self::assertSame(
             ['disk 2, prvá', 'disk 2, druhá', 'disk 1, prvá', 'disk 1, druhá'],
-            $tracks->map(static fn (Model $t): string => (string) $t->getAttribute('title'))->all(),
+            self::titles($tracks),
             'a separate query path — it has to sort too',
         );
     }
