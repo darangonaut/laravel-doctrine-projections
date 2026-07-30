@@ -21,6 +21,24 @@ Book::with('author')
 Book::query()->update(['status' => 'published']);
 ```
 
+## A working example
+
+[**darangonaut/doctrine-projections-todo**](https://github.com/darangonaut/doctrine-projections-todo)
+is a small todo application built on this package: three Doctrine
+entities, from which the migration, the schema and the Eloquent models
+are all generated.
+
+It is worth a look for two things this README can only assert. Its domain
+tests run without booting Laravel or touching a database, because the
+entities do not know one exists. And its suite runs on `:memory:`, which
+is the sharpest test of `SharedPdoDriver` there is — connection
+parameters derived from config would hand Doctrine its own empty
+database, and every other test would fail.
+
+It was written against the published package rather than a path
+repository, so it also checks that the release installs and works from
+nothing.
+
 ## What this is not
 
 It is **not** a Doctrine bridge for Laravel. It does not build an
