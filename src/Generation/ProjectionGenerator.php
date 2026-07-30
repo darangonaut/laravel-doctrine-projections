@@ -95,14 +95,51 @@ final class ProjectionGenerator
             $metadata,
         );
 
+        // Reported once, on whichever projection is rendered first: the
+        // warning is about the mapping as a whole, not about one model.
+        $seed = $this->enabledFilterWarning();
         $rendered = [];
 
         foreach ($metadata as $meta) {
-            $projection = $this->render($meta);
+            $projection = $this->render($meta, $seed);
+            $seed = [];
             $rendered[$projection->className] = $projection;
         }
 
         return $rendered;
+    }
+
+    /**
+     * A Doctrine filter narrows entity queries and cannot narrow a
+     * projection — Eloquent queries the table and knows nothing about it.
+     *
+     * Worth saying loudly rather than listing as a limitation, because
+     * the usual reason for a filter is to keep one tenant from seeing
+     * another's rows. Measured: with a tenant filter enabled the entity
+     * returned 2 rows and the projection returned all 4.
+     *
+     * Only *enabled* filters can be seen from here — Doctrine's
+     * Configuration exposes no way to enumerate configured ones — so this
+     * fires when generation happens to run with them on, and the README
+     * carries the rest.
+     *
+     * @return list<string>
+     */
+    private function enabledFilterWarning(): array
+    {
+        $filters = array_keys($this->em->getFilters()->getEnabledFilters());
+
+        if ($filters === []) {
+            return [];
+        }
+
+        return [sprintf(
+            'Doctrine filter(s) %s are enabled. They narrow entity queries and cannot narrow a '
+            .'projection, which reads the table directly — so rows the entity hides are visible '
+            .'through the model. Apply the same condition yourself, or keep those tables '
+            .'unprojected.',
+            implode(', ', $filters),
+        )];
     }
 
     /**
@@ -156,12 +193,14 @@ final class ProjectionGenerator
         }
     }
 
-    /** @param ClassMetadata<object> $meta */
-    private function render(ClassMetadata $meta): RenderedProjection
+    /**
+     * @param  ClassMetadata<object>  $meta
+     * @param  list<string>  $warnings  reported alongside this projection
+     */
+    private function render(ClassMetadata $meta, array $warnings = []): RenderedProjection
     {
         $class = class_basename($meta->getName());
         $this->imports = new Imports($class, $this->reserved);
-        $warnings = [];
 
         // The base class and the trait go through the collector too — an
         // entity may be named Model or ReadOnlyModel, and then they must

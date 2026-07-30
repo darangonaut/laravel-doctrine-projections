@@ -382,6 +382,25 @@ A welcome side effect: it is one connection, so `DB::transaction()` wraps
 `$em->flush()` too. `SharedPdoConnection` handles the transaction overlap —
 if one is already open, Doctrine borrows it rather than starting its own.
 
+### Doctrine filters do not apply — and that one can bite
+
+A filter narrows entity queries. A projection reads the table, so it does
+not narrow at all. With a tenant filter enabled, measured on four rows:
+
+| | rows |
+|---|---|
+| `$em->getRepository(Note::class)->findAll()` | 2 |
+| `Note::query()->count()` on the projection | **4** |
+
+The two rows belonging to the other tenant come back. This is not a bug
+to be fixed — Eloquent cannot know about Doctrine's filter registry —
+but it is worth stating plainly, because the usual reason for a filter is
+exactly the thing that goes wrong here.
+
+If a filter is enabled while generating, the command says so. Otherwise:
+apply the same condition at the call site, exclude those entities from
+generation, or accept that the projection sees every row.
+
 ## What is not covered
 
 Being explicit about the edges, since a generator that guesses is worse
@@ -402,8 +421,7 @@ than one that refuses:
   `billing_street`, or bare `street` when `columnPrefix: false`. Doctrine
   calls that field `billing.street`; a generated property of that name
   would be unusable, so the column name is what is emitted.
-- **Doctrine filters and second-level cache** do not apply to projections.
-  They query the table directly.
+- **Second-level cache** does not apply. Projections query the table.
 - **`indexBy` on a collection** cannot be carried across. Doctrine hands
   back a map keyed by the field; an Eloquent relation is always a list,
   with no hook to change that which survives regeneration. So
