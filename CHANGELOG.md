@@ -4,6 +4,54 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-07-30
+
+Column types whose PHP shape the two sides disagreed on. Four of the
+eight checked were wrong, and all four were quiet: no error, just a
+different number or a different day.
+
+**A minor, not a patch.** A `bigint` that handed you an `int` now hands
+you a `string`, and a `decimal` that handed you a `float` does the same.
+Comparisons with `===`, and JSON output where the value was a number, will
+notice.
+
+### Fixed
+
+- **`bigint` and `decimal` keep every digit.** Doctrine returns a string
+  for both, and not out of caution: an unsigned `BIGINT` goes past
+  `PHP_INT_MAX`, and no float holds an arbitrary `DECIMAL`. Casting to
+  `int` and `float` silently changed the value — measured on MySQL,
+  `12345678901234.5678` came back as `12345678901234.568`. Both are cast
+  to `string` now, exactly as Doctrine reports them.
+
+  Laravel's `decimal:N` looked like the better fit and is not: it pads to
+  a fixed scale, which on SQLite — where `DECIMAL` is not a real type —
+  invents places Doctrine never reported.
+
+- **A `time` column is anchored where Doctrine anchors it.** There is no
+  time cast in Laravel, so `14:30:00` went through the datetime cast and
+  came back as *today* at 14:30 while the entity said 1970-01-01 14:30 —
+  the same clock time on two different days. The package now ships
+  `Eloquent\Casts\TimeOfDay`, which mirrors
+  `TimeImmutableType::convertToPHPValue()`.
+
+- **`datetimetz` had no cast at all** and arrived as a string. It now goes
+  through the immutable datetime cast, same instant on both sides.
+
+- **`simple_array` arrived as `dom,kúrenie`** instead of a list. The
+  package ships `Eloquent\Casts\SimpleArray`, matching
+  `SimpleArrayType::convertToPHPValue()` down to returning an empty array
+  for null rather than null.
+
+Both shipped casts refuse writes, like everything else on a projection.
+
+### Verified, unchanged
+
+- `json` and `boolean` agree on all three drivers.
+- A `date` column does **not** gain a time — the generator has always
+  distinguished `immutable_date` from `immutable_datetime`. This was on
+  the list as a suspicion and the list was wrong.
+
 ## [0.5.1] — 2026-07-30
 
 Another round of invented scenarios. The bugs have moved: these are not
@@ -353,6 +401,7 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.6.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.6.0
 [0.5.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.1
 [0.5.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.0
 [0.4.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.4.1
