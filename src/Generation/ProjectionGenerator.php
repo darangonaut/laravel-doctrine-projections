@@ -209,7 +209,14 @@ final class ProjectionGenerator
             }
 
             $target = class_basename($assoc->targetEntity);
-            $property = Str::snake($name);
+
+            // Must match the generated method exactly: Eloquent resolves
+            // `$task->blockedBy` by looking for a method of that name, so a
+            // snake_cased `$blocked_by` is not a property at all — it reads
+            // back as null, silently, while the docblock and every IDE
+            // insist it is fine. Columns below stay snake_case; they really
+            // are columns.
+            $property = Str::camel($name);
 
             if ($assoc->isToMany()) {
                 $lines[] = sprintf(

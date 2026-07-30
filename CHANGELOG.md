@@ -4,6 +4,21 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Multi-word relations were documented under a name that does not
+  exist.** The `@property` line was snake_cased while the generated method
+  is camelCase, so a `blockedBy` association was advertised as
+  `$task->blocked_by` — which Eloquent resolves to null, silently, while
+  the docblock and every IDE insist it is the related model.
+  `with('blocked_by')` threw `Call to undefined relationship`.
+
+  Single-word relations hid it: `parent` and `tags` are identical in both
+  spellings, and every fixture had only those. The foreign key column
+  beside it stays snake_case, because that one really is a column.
+
 ## [0.3.1] — 2026-07-30
 
 Both fixes came out of walking through the mapping shapes the README

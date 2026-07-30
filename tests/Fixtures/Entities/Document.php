@@ -21,4 +21,14 @@ class Document
     #[ORM\ManyToOne(targetEntity: self::class)]
     #[ORM\JoinColumn(name: 'parent_uuid', referencedColumnName: 'uuid', nullable: true)]
     private ?Document $parent = null;
+
+    /**
+     * Deliberately two words. Every other relation in these fixtures is a
+     * single word, where camelCase and snake_case look the same — which is
+     * how the generated docblock came to advertise `$replaced_by`, a
+     * property Eloquent does not have.
+     */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'replaced_by_uuid', referencedColumnName: 'uuid', nullable: true)]
+    private ?Document $replacedBy = null;
 }
