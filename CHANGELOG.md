@@ -4,7 +4,7 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.3] — 2026-07-30
 
 ### Fixed
 
@@ -189,6 +189,7 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.3.3]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.3.3
 [0.3.2]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.3.2
 [0.3.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.3.1
 [0.3.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.3.0
