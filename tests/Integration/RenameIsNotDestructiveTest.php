@@ -99,6 +99,51 @@ final class RenameIsNotDestructiveTest extends TestCase
         self::assertSame(['prvá' => 'text prvej', 'druhá' => 'text druhej'], $rows);
     }
 
+    /**
+     * The generated migration wraps itself in a transaction on SQLite, and
+     * that is worth nothing unless SQLite really rolls DDL back. It does —
+     * but the whole fix rests on it, so it is checked rather than trusted.
+     *
+     * The failure being simulated is real: tightening a column to NOT NULL
+     * while rows hold NULL. Unwrapped, that rejected INSERT lands after the
+     * table has already been dropped and recreated, and every row is gone.
+     */
+    #[Test]
+    public function sqlite_rolls_a_failed_rebuild_all_the_way_back(): void
+    {
+        $connection = $this->em->getConnection();
+
+        $before = $connection->fetchAllAssociative('SELECT id, title, content FROM notes ORDER BY id');
+        self::assertCount(2, $before);
+
+        try {
+            $connection->transactional(function ($c): void {
+                $c->executeStatement('CREATE TEMPORARY TABLE __temp__notes AS SELECT id, title, content FROM notes');
+                $c->executeStatement('DROP TABLE notes');
+                $c->executeStatement(
+                    'CREATE TABLE notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title VARCHAR(100) NOT NULL,
+                        content CLOB NOT NULL,
+                        added VARCHAR(10) NOT NULL
+                    )',
+                );
+                // nothing supplies the new NOT NULL column: this is the failure
+                $c->executeStatement('INSERT INTO notes (id, title, content) SELECT id, title, content FROM __temp__notes');
+            });
+
+            self::fail('the rebuild was supposed to fail');
+        } catch (\Throwable) {
+            // expected
+        }
+
+        self::assertSame(
+            $before,
+            $connection->fetchAllAssociative('SELECT id, title, content FROM notes ORDER BY id'),
+            'a failed rebuild inside a transaction must leave every row where it was',
+        );
+    }
+
     #[Test]
     public function dropping_a_column_still_requires_consent(): void
     {

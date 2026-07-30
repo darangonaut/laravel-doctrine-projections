@@ -222,6 +222,39 @@ One thing a rebuild does not preserve, whatever the classifier says: it
 drops and recreates the table, so triggers and views attached to it are
 gone afterwards. That is SQLite, not this package.
 
+### Generated migrations are atomic where the database allows it
+
+A rebuild that fails halfway through is the dangerous case: the table has
+already been dropped and recreated, and the `INSERT` that would have put
+the rows back never runs. Laravel does not protect you here — its SQLite
+grammar reports `supportsSchemaTransactions() === false`, so migrations
+run unwrapped.
+
+That is not theoretical. Tightening a column to `NOT NULL` while rows
+still held `NULL` emptied a table of eight rows: the rejected `INSERT`
+landed after the drop, and the migration was not even recorded as run.
+
+So on databases that can roll DDL back — SQLite and PostgreSQL — the
+generated migration wraps itself:
+
+```php
+public function up(): void
+{
+    DB::transaction(function (): void {
+        DB::statement(<<<'SQL'
+            ...
+```
+
+The same failure now leaves every row where it was. MySQL and MariaDB
+implicitly commit on DDL, so nothing is wrapped there — promising an
+atomicity the server will not honour would be worse than being plain
+about it.
+
+**Check your data before tightening a constraint.** Adding `NOT NULL`,
+`UNIQUE` or a narrower type is valid DDL that a populated table can
+reject at runtime; the diff cannot see that coming, and on MySQL there is
+no rollback to save you.
+
 Generated migrations are **raw SQL and therefore driver-specific** — output
 generated on MySQL will not run on SQLite.
 

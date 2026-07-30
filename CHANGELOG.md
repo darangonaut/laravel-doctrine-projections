@@ -4,6 +4,23 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Generated migrations are now atomic where the database can roll DDL
+  back** (SQLite, PostgreSQL). Laravel's SQLite grammar reports
+  `supportsSchemaTransactions() === false`, so it runs migrations
+  unwrapped — and on SQLite a column change is a table rebuild. A failure
+  halfway through one left the table dropped, recreated and empty.
+
+  Found by testing what happens when a migration fails rather than when it
+  succeeds: tightening a column to `NOT NULL` while rows held `NULL`
+  emptied a table of eight rows, and the migration was not even recorded
+  as run. The same failure now leaves every row untouched.
+
+  MySQL and MariaDB implicitly commit on DDL, so nothing is wrapped there.
+
 ## [0.2.0] — 2026-07-30
 
 ### Changed

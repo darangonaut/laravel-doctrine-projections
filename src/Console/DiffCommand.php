@@ -6,6 +6,8 @@ namespace Darangonaut\DoctrineProjections\Console;
 
 use Darangonaut\DoctrineProjections\Schema\StatementClassifier;
 use Darangonaut\DoctrineProjections\Support\Config;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Illuminate\Console\Command;
@@ -102,10 +104,32 @@ final class DiffCommand extends Command
             return self::SUCCESS;
         }
 
-        $path = $this->write($sql);
+        $path = $this->write($sql, $this->hasTransactionalDdl($em));
         $this->components->info('Generated: '.$path);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Whether the database can roll back DDL.
+     *
+     * This decides whether the generated migration wraps itself in a
+     * transaction, and it matters most exactly where it is true. Laravel's
+     * SQLite grammar reports `supportsSchemaTransactions() === false`, so
+     * migrations there run unwrapped — and a SQLite column change is a
+     * table rebuild. Fail halfway through one and the table has already
+     * been dropped and recreated empty. Measured, not assumed: tightening
+     * a column to NOT NULL while rows held NULL emptied a table of eight.
+     *
+     * MySQL and MariaDB implicitly commit on DDL, so wrapping there would
+     * promise an atomicity the server will not honour.
+     */
+    private function hasTransactionalDdl(EntityManagerInterface $em): bool
+    {
+        $platform = $em->getConnection()->getDatabasePlatform();
+
+        return $platform instanceof SQLitePlatform
+            || $platform instanceof PostgreSQLPlatform;
     }
 
     /**
@@ -141,20 +165,34 @@ final class DiffCommand extends Command
     }
 
     /** @param list<string> $sql */
-    private function write(array $sql): string
+    private function write(array $sql, bool $atomic): string
     {
         $option = $this->option('name');
         $name = preg_replace('/[^a-z0-9_]/', '_', strtolower(is_string($option) ? $option : '')) ?: 'doctrine_diff';
         $dir = Config::string('doctrine-projections.diff.path');
         $path = sprintf('%s/%s_%s.php', rtrim($dir, '/'), date('Y_m_d_His'), $name);
 
+        $indent = $atomic ? '            ' : '        ';
+
         $statements = implode("\n", array_map(
             static fn (string $s): string => sprintf(
-                "        DB::statement(<<<'SQL'\n            %s\n            SQL);",
-                $s,
+                "%sDB::statement(<<<'SQL'\n%s    %s\n%s    SQL);",
+                $indent, $indent, $s, $indent,
             ),
             $sql,
         ));
+
+        if ($atomic) {
+            $statements = implode("\n", [
+                '        // This database can roll back DDL, so a failure halfway through',
+                '        // leaves the schema untouched rather than half-migrated. On a',
+                '        // SQLite column change that is the difference between a failed',
+                '        // migration and an emptied table.',
+                '        DB::transaction(function (): void {',
+                $statements,
+                '        });',
+            ]);
+        }
 
         File::ensureDirectoryExists($dir);
         File::put($path, <<<PHP
