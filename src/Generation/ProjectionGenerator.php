@@ -185,7 +185,12 @@ final class ProjectionGenerator
         $byBase = [];
 
         foreach ($metadata as $meta) {
-            $byBase[class_basename($meta->getName())][] = $meta->getName();
+            // Keyed case-insensitively: the projections become files, and
+            // on macOS or Windows `Order.php` and `order.php` are the same
+            // file — one would quietly overwrite the other. PHP class
+            // names are case-insensitive too, so nothing is lost by
+            // treating them as one name here.
+            $byBase[strtolower(class_basename($meta->getName()))][] = $meta->getName();
         }
 
         $clashes = array_filter($byBase, static fn (array $classes): bool => count($classes) > 1);

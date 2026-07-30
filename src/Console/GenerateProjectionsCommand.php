@@ -85,7 +85,14 @@ final class GenerateProjectionsCommand extends Command
             }
 
             foreach (self::phpFilesIn($path) as $stale) {
-                File::delete($stale);
+                // Also a bool rather than a throw. A file that survives
+                // deletion is one `--check` will later report as orphaned,
+                // with nothing to explain why it is still there.
+                if (! File::delete($stale)) {
+                    $this->components->error('Could not delete '.$stale.'. Is the directory writable?');
+
+                    return self::FAILURE;
+                }
             }
         }
 
