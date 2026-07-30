@@ -60,6 +60,17 @@ php artisan vendor:publish --tag=doctrine-projections-config
 The package needs `EntityManagerInterface` resolvable from the container.
 If you already use `laravel-doctrine/orm`, you are done.
 
+**One EntityManager.** Whatever the container returns for
+`EntityManagerInterface` is what gets projected. An application running
+two of them will need to bind the one it wants before the command runs —
+there is no option to name a manager, because a package that generates
+one directory of models has no way to keep two mappings apart in it.
+
+**With `config:cache`**, `path` is resolved when the cache is written.
+That is correct for the usual deploy order (cache inside the release
+directory) and wrong if you cache in one directory and run in another —
+the same as any package using `app_path()` in its config.
+
 ## Usage
 
 ```bash
