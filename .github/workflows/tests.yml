@@ -3,6 +3,7 @@ name: tests
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 jobs:
@@ -12,11 +13,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['8.3', '8.4']
-        laravel: ['11.*', '12.*']
+        # Testbench pulls laravel/framework, which *replaces* the
+        # illuminate/* packages, so pinning both at once is unsatisfiable.
+        # The matrix therefore pins the framework and the matching
+        # testbench rather than the individual illuminate components.
+        # Laravel 11 is absent on purpose: every 11.x release is blocked by
+        # security advisories, so Composer refuses to install it at all.
         include:
+          - php: '8.3'
+            laravel: '12.*'
+            testbench: '10.*'
+          - php: '8.4'
+            laravel: '12.*'
+            testbench: '10.*'
+          - php: '8.3'
+            laravel: '13.*'
+            testbench: '11.*'
           - php: '8.4'
             laravel: '13.*'
+            testbench: '11.*'
 
     name: PHP ${{ matrix.php }} · Laravel ${{ matrix.laravel }}
 
@@ -31,10 +46,9 @@ jobs:
 
       - name: Pin Laravel
         run: >
-          composer require --no-update --no-interaction
-          "illuminate/console:${{ matrix.laravel }}"
-          "illuminate/database:${{ matrix.laravel }}"
-          "illuminate/support:${{ matrix.laravel }}"
+          composer require --dev --no-update --no-interaction
+          "laravel/framework:${{ matrix.laravel }}"
+          "orchestra/testbench:${{ matrix.testbench }}"
 
       - name: Install
         run: composer update --prefer-dist --no-interaction --no-progress

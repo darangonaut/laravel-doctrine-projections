@@ -241,7 +241,11 @@ than one that refuses:
 
 ## Requirements
 
-PHP 8.3+, Doctrine ORM 3.1+, DBAL 4, Laravel 11/12/13.
+PHP 8.3 or 8.4, Doctrine ORM 3.1+, DBAL 4, Laravel 12 or 13.
+
+Laravel 11 is not supported: every 11.x release is currently blocked by
+security advisories, so Composer will not install it. All four supported
+combinations are covered by CI.
 
 ## Testing and analysis
 

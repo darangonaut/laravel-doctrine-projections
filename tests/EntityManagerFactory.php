@@ -26,7 +26,12 @@ final class EntityManagerFactory
         $config->setProxyNamespace('DoctrineProjectionsTestProxies');
         $config->setMetadataCache(new ArrayAdapter);
         $config->setQueryCache(new ArrayAdapter);
-        $config->enableNativeLazyObjects(true);
+
+        // Native lazy objects need PHP 8.4; nothing here depends on
+        // proxies, so on 8.3 they simply stay off.
+        if (PHP_VERSION_ID >= 80400) {
+            $config->enableNativeLazyObjects(true);
+        }
 
         $connection = DriverManager::getConnection(
             ['driver' => 'pdo_sqlite', 'memory' => true],

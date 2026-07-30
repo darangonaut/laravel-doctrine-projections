@@ -1,7 +1,14 @@
 {
     "name": "darangonaut/laravel-doctrine-projections",
     "description": "Read-only Eloquent models generated from Doctrine ORM metadata — query with Eloquent, write through your domain.",
-    "keywords": ["laravel", "doctrine", "eloquent", "read-model", "projection", "code-generation"],
+    "keywords": [
+        "laravel",
+        "doctrine",
+        "eloquent",
+        "read-model",
+        "projection",
+        "code-generation"
+    ],
     "license": "MIT",
     "authors": [
         {
@@ -13,9 +20,9 @@
         "php": "^8.3",
         "doctrine/dbal": "^4.0",
         "doctrine/orm": "^3.1",
-        "illuminate/console": "^11.0 || ^12.0 || ^13.0",
-        "illuminate/database": "^11.0 || ^12.0 || ^13.0",
-        "illuminate/support": "^11.0 || ^12.0 || ^13.0"
+        "illuminate/console": "^12.0 || ^13.0",
+        "illuminate/database": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0"
     },
     "require-dev": {
         "larastan/larastan": "^3.10",
@@ -24,7 +31,7 @@
         "phpstan/phpstan": "^2.2",
         "phpstan/phpstan-doctrine": "^2.0",
         "phpunit/phpunit": "^11.0 || ^12.0",
-        "symfony/cache": "^8.1"
+        "symfony/cache": "^7.2 || ^8.0"
     },
     "autoload": {
         "psr-4": {
