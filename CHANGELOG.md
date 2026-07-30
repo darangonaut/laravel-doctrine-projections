@@ -4,6 +4,22 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`#[ORM\OrderBy]` is now carried onto the relation.** It was dropped,
+  so an association came back sorted through the entity and unsorted
+  through the projection. On a list whose insertion order was the reverse
+  of its `position`, the two sides returned the same rows in opposite
+  order — nothing threw, the sequence was simply wrong.
+
+  Doctrine keys `orderBy` by *field* name, so `dueOn` becomes `due_on`
+  here; emitting the field name would ask the database for a column that
+  does not exist. A field that cannot be resolved to a column raises
+  `UnsupportedMapping` rather than generating a relation that silently
+  ignores half its mapping.
+
 ## [0.3.2] — 2026-07-30
 
 Found while checking that tightening a foreign key from nullable to

@@ -45,6 +45,24 @@ final class UnsupportedMapping extends RuntimeException
     }
 
     /**
+     * `#[ORM\OrderBy]` names fields on the target entity, which have to be
+     * resolved to columns before Eloquent can sort by them. If one cannot
+     * be resolved, emitting the relation without its ordering would leave
+     * the projection quietly disagreeing with the entity about row order —
+     * exactly the drift this package is supposed to remove.
+     */
+    public static function unorderableAssociation(string $entity, string $field): self
+    {
+        return new self(sprintf(
+            'The association on %s orders by "%s", which is not a field on the target entity, '
+            .'so it cannot be translated to a column. Order by a mapped field, or drop the '
+            .'#[ORM\OrderBy] and sort at the call site.',
+            $entity,
+            $field,
+        ));
+    }
+
+    /**
      * Doctrine's mapping classes split by side, and the resolution above
      * assumes the counterpart of an inverse side is an owning side of the
      * matching kind. If that ever fails, guessing would be worse than

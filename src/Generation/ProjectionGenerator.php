@@ -15,6 +15,7 @@ use Doctrine\ORM\Mapping\InverseSideMapping;
 use Doctrine\ORM\Mapping\ManyToManyInverseSideMapping;
 use Doctrine\ORM\Mapping\ManyToManyOwningSideMapping;
 use Doctrine\ORM\Mapping\OneToOneInverseSideMapping;
+use Doctrine\ORM\Mapping\ToManyAssociationMapping;
 use Doctrine\ORM\Mapping\ToOneOwningSideMapping;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -419,7 +420,7 @@ final class ProjectionGenerator
         return sprintf(
             "\n    /** @return %s<%s, \$this> */\n"
             ."    public function %s(): %s\n    {\n"
-            ."        return \$this->%s(%s::class, %s);\n    }\n",
+            ."        return \$this->%s(%s::class, %s)%s;\n    }\n",
             $typeRef,
             $target,
             $method,
@@ -428,7 +429,53 @@ final class ProjectionGenerator
             lcfirst($type),
             $target,
             $args,
+            $this->ordering($assoc),
         );
+    }
+
+    /**
+     * Mirrors Doctrine's `#[ORM\OrderBy]` onto the relation.
+     *
+     * Dropping it looked harmless and was not: the same association came
+     * back in one order through the entity and another through the
+     * projection — measured on a list whose insertion order was the
+     * reverse of its `position`. Silently diverging from the mapping is
+     * the failure this package exists to prevent.
+     *
+     * Doctrine keys `orderBy` by *field* name, so `dueOn` has to become
+     * `due_on` here; emitting the field name would produce SQL for a
+     * column that does not exist.
+     */
+    private function ordering(AssociationMapping $assoc): string
+    {
+        // Only to-many mappings carry an ordering, and it is reached
+        // through the interface method — the property behind it lives on
+        // an implementation trait, so `->orderBy` is undefined on a
+        // ManyToOne rather than null.
+        if (! $assoc instanceof ToManyAssociationMapping) {
+            return '';
+        }
+
+        $target = $this->em->getClassMetadata($assoc->targetEntity);
+        $chain = '';
+
+        foreach ($assoc->orderBy() as $field => $direction) {
+            if (! $target->hasField($field)) {
+                throw UnsupportedMapping::unorderableAssociation($assoc->sourceEntity, $field);
+            }
+
+            // Doctrine's interface types this as 'asc'|'desc' but stores
+            // whatever the attribute said, so 'DESC' arrives here. Laravel
+            // would lowercase it anyway; doing it now keeps the generated
+            // file from varying with how someone typed the mapping.
+            $chain .= sprintf(
+                "\n            ->orderBy('%s', '%s')",
+                $target->getColumnName($field),
+                strtolower($direction) === 'desc' ? 'desc' : 'asc',
+            );
+        }
+
+        return $chain;
     }
 
     /**

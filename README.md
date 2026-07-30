@@ -119,6 +119,7 @@ holds only until someone names a column differently.
 | `OneToOne` inverse | `hasOne(...)` |
 | `ManyToMany` owning | `belongsToMany(Genre::class, 'book_genre', 'book_id', 'genre_id')` |
 | `ManyToMany` inverse | same table, keys swapped |
+| `#[ORM\OrderBy]` | `->orderBy(...)` chained onto the relation, field names resolved to columns |
 | `enumType` | an enum cast |
 | non-integer key | `$keyType` + `$incrementing = false` |
 | composite key | `$primaryKey = null` **and a warning** — see below |
