@@ -4,6 +4,66 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-07-31
+
+The rest of the scenario list, worked through end to end. Five fixes; the
+two that mattered most were silent, and the other three turn a silent
+failure into a loud one.
+
+**A minor, not a patch** — three things that used to run now refuse. Each
+is listed in [UPGRADING.md](UPGRADING.md).
+
+### Fixed
+
+- **An abstract class in the middle of a single-table hierarchy had no
+  scope at all**, so it returned every row in the table. Measured:
+  Doctrine 3 rows, the projection 4, and the extra one was a folder. The
+  scope is now decided by whether the class is the root — the root stays
+  unscoped, because "every node" is a real question; everything below it
+  is scoped to its own value plus its subclasses'.
+
+- **A failed write was reported as success.** `File::put()` returns false
+  rather than throwing when the handler is off, and throws a raw
+  `ErrorException` when it is on. Neither was looked at, so a run that
+  wrote nothing still printed "3 projection(s) generated" and exited 0 —
+  a green deploy over an application left without models. Deletion of
+  stale files is checked too.
+
+### Refused rather than allowed
+
+- **A projection namespace your entities already live in.** It gave the
+  generated model the entity's own fully qualified name; whichever the
+  autoloader reached first won.
+
+- **Two entities whose short names differ only in case.** `Order.php` and
+  `order.php` are one file on macOS and Windows.
+
+- **Overwriting an existing migration.** The name is the timestamp to the
+  second plus `--name`, and the default name is `doctrine_diff`, so two
+  ordinary runs in the same second resolved to one path.
+
+### Added
+
+- `UPGRADING.md`, and a README section saying which of the package's
+  classes an application is expected to touch.
+
+### Verified, unchanged
+
+Self-referencing `OneToOne` and `ManyToMany`, two associations onto one
+entity, mapped superclasses, entities with nothing but a key, long
+identifiers, `indexBy` on a self-reference, `fetch`/`cascade`/
+`orphanRemoval`, nullable columns in a composite key, and the Eloquent
+surface an application actually uses — `chunk`, `cursor`, `lazy`,
+`paginate`, route model binding, `replicate`, `toArray`, `toJson` — all
+under `Model::shouldBeStrict()`.
+
+Generation needs no database at all, which is now pinned by a test: it
+reads mapping, not schema. 200 entities generate in 0.03s.
+
+Three mappings turned out to be broken before a projection is involved,
+and are documented rather than guarded: a non-backed enum, `enumType` on
+a `json` column, and a discriminator column mapped as a field.
+
 ## [0.6.0] — 2026-07-30
 
 Column types whose PHP shape the two sides disagreed on. Four of the
@@ -401,6 +461,7 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.7.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.7.0
 [0.6.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.6.0
 [0.5.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.1
 [0.5.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.0
