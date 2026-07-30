@@ -893,9 +893,20 @@ final class ProjectionGenerator
         }
 
         return match ($meta->getTypeOfField($field)) {
-            'integer', 'smallint', 'bigint' => "'integer'",
+            'integer', 'smallint' => "'integer'",
+            // Doctrine hands back a string for both of these, and for the
+            // same reason: an int cannot hold every BIGINT (unsigned goes
+            // past PHP_INT_MAX) and a float cannot hold a DECIMAL. Casting
+            // to int or float silently changed the value — measured on
+            // MySQL, 12345678901234.5678 came back as …4.568.
+            //
+            // Plain `string` rather than Laravel's `decimal:N`: that one
+            // pads to a fixed scale, which on SQLite (no real DECIMAL)
+            // invents places Doctrine does not report. Returning exactly
+            // what the driver gave is what keeps the two sides equal.
+            'bigint', 'decimal' => "'string'",
             'boolean' => "'boolean'",
-            'decimal', 'float' => "'float'",
+            'float' => "'float'",
             'datetime', 'datetime_immutable' => "'immutable_datetime'",
             'date', 'date_immutable' => "'immutable_date'",
             'time', 'time_immutable' => "'immutable_datetime'",
@@ -914,9 +925,11 @@ final class ProjectionGenerator
         $type = $enum !== null
             ? $this->imports->reference($enum)
             : match ($meta->getTypeOfField($field)) {
-                'integer', 'smallint', 'bigint' => 'int',
+                'integer', 'smallint' => 'int',
                 'boolean' => 'bool',
-                'decimal', 'float' => 'float',
+                'float' => 'float',
+                // string on both, matching the casts above
+                'bigint', 'decimal' => 'string',
                 'datetime', 'datetime_immutable', 'date', 'date_immutable',
                 'time', 'time_immutable' => $this->imports->reference(CarbonImmutable::class),
                 'json' => 'array',

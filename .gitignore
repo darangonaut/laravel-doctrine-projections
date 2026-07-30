@@ -2,3 +2,6 @@
 /composer.lock
 .phpunit.cache
 .DS_Store
+
+# Pracovný zoznam scenárov — nie súčasť balíka.
+/TODO.md
