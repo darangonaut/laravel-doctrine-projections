@@ -539,6 +539,28 @@ CI runs that suite against SQLite, MySQL 8.4 and PostgreSQL 16. It is
 written against the mapping, so adding an entity to a fixture directory
 extends the coverage without touching a test.
 
+## Upgrading
+
+Behaviour changes are listed in [UPGRADING.md](UPGRADING.md); everything
+else is additive. Every upgrade ends the same way — regenerate:
+
+```bash
+php artisan doctrine:projections
+```
+
+## Public API
+
+What an application is expected to touch: the two commands, the config
+file, and — if you wire Doctrine yourself — `Support\MappedTables` and
+`Support\SharedPdoDriver`. The exceptions are worth catching by type;
+`Eloquent\Casts\*` appear in generated files but are not meant to be
+constructed by hand.
+
+Everything under `Generation\` and `Schema\` is the machinery behind
+`doctrine:projections` and `doctrine:diff`. It is public because the
+commands are thin wrappers over it and that makes it testable, not
+because it is an interface to build on.
+
 ## License
 
 MIT.
