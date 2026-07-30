@@ -137,11 +137,15 @@ Everything that does not need a single key column keeps working —
 Seat::query()->where(['row_letter' => 'A', 'seat_number' => 2])->first();
 ```
 
-`find()` and `findMany()` refuse with an explanation. They used to
-compose `where seats. = 1` and hand back `no such column: seats.` along
-with a PHP deprecation raised inside Eloquent, which told the caller
-nothing. `getKey()` still returns null, as Eloquent does for any model
-without a key.
+`find()`, `findMany()` and **anything that identifies a row by its key**
+refuse with an explanation: `getKey()`, `is()`, `unique()`, `diff()`,
+`contains()`, `modelKeys()`, `fresh()`.
+
+That last group used to answer rather than refuse, and the answers were
+wrong without saying so. `getKey()` returned null for every row, and
+Eloquent takes that at face value: `$a->is($b)` was true for different
+seats, `unique()` turned three rows into none, and `fresh()` on seat B1
+handed back A1.
 
 **Single table inheritance is scoped, not ignored.** Every subclass shares
 one table, so without a filter `CardPayment::all()` would hand back cash
@@ -158,6 +162,28 @@ Name collisions are handled: an entity called `HasMany`, `Model` or
 `ReadOnlyModel` produces fully-qualified references instead of a broken
 import. Two entities sharing a short name are a hard error, because their
 projections would overwrite each other's file.
+
+### Reserved names
+
+A word reserved by **SQL** is a non-event. Doctrine wants it backticked
+in the mapping (`#[ORM\Table(name: '`order`')]`) but hands the name back
+clean, and Eloquent quotes identifiers itself — a table called `order`
+and a column called `key` both just work.
+
+A name reserved by **Eloquent** is the dangerous one, and there are two
+kinds:
+
+- **A column named after a Model property** — `exists`, `timestamps`,
+  `incrementing` — cannot be read as `$model->exists`. PHP finds Model's
+  own public property and never calls `__get`, so the answer is the
+  framework's, not the column's, and nothing errors. The generator warns
+  and leaves that column out of the docblock rather than telling every
+  IDE something untrue. Read it with `getAttribute('exists')`.
+- **An association named after a Model method** — `delete`, `save`,
+  `query`, `with` — is refused outright. A method on the class silently
+  replaces the one inherited from a trait, so a relation called `delete`
+  would quietly remove the write lock while the projection went on
+  looking read-only.
 
 ## The lock
 

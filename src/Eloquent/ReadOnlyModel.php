@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Eloquent;
 
 use Darangonaut\DoctrineProjections\Exceptions\ReadOnlyProjection;
+use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -32,6 +33,27 @@ trait ReadOnlyModel
                 throw ReadOnlyProjection::attemptedTo($event, $model::class);
             });
         }
+    }
+
+    /**
+     * Refuses rather than answering null on a composite-key projection.
+     *
+     * Eloquent asks `getKey()` whenever it needs to identify a row and
+     * takes the answer at face value. Null for every row meant every row
+     * looked like the same one: `is()` returned true for different seats,
+     * `unique()` turned three rows into none, and `fresh()` on B1 handed
+     * back A1 — all without a word.
+     *
+     * Reading does not go through here, so `where()`, `get()`, `pluck()`,
+     * casts and ordering are untouched.
+     */
+    public function getKey(): mixed
+    {
+        if ((string) $this->getKeyName() === '') {
+            throw UnsupportedMapping::compositeKeyIdentity('getKey', static::class);
+        }
+
+        return parent::getKey();
     }
 
     /**

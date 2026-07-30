@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use ReflectionClass;
+use ReflectionProperty;
 
 /**
  * Renders read-only Eloquent models from Doctrine metadata.
@@ -43,6 +45,9 @@ final class ProjectionGenerator
 
     /** @var list<string> entity classes that will get a projection */
     private array $projected = [];
+
+    /** @var list<string>|null names Eloquent's Model already uses */
+    private ?array $modelProperties = null;
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -161,7 +166,7 @@ final class ProjectionGenerator
         // The body is assembled before the header, because assembling it
         // is what collects the imports.
         $members = $this->members($meta, $warnings);
-        $docblock = $this->propertyDocblock($meta);
+        $docblock = $this->propertyDocblock($meta, $warnings);
 
         $useBlock = implode("\n", array_map(
             static fn (string $fqcn): string => "use {$fqcn};",
@@ -191,16 +196,56 @@ final class ProjectionGenerator
         return new RenderedProjection($class, $meta->getName(), $meta->getTableName(), $code, $warnings);
     }
 
-    /** @param ClassMetadata<object> $meta */
-    private function propertyDocblock(ClassMetadata $meta): string
+    /**
+     * Names Eloquent's Model already uses for a property of its own.
+     *
+     * A column called `exists` is not readable as `$flag->exists`: PHP
+     * finds Model's public `$exists` and never calls `__get`, so the
+     * answer is "this row is persisted" — `true` — while the column says
+     * false. Nothing errors.
+     *
+     * @return list<string>
+     */
+    private function modelPropertyNames(): array
+    {
+        return $this->modelProperties ??= array_map(
+            static fn (ReflectionProperty $property): string => $property->getName(),
+            (new ReflectionClass(Model::class))->getProperties(),
+        );
+    }
+
+    /**
+     * @param  ClassMetadata<object>  $meta
+     * @param  list<string>  $warnings
+     */
+    private function propertyDocblock(ClassMetadata $meta, array &$warnings): string
     {
         $lines = [];
 
         foreach ($meta->getFieldNames() as $field) {
+            $column = $meta->getColumnName($field);
+
+            // Documenting a shadowed column would tell every IDE and
+            // static analyser that `$model->exists` is the column, which is
+            // the one thing it is not. The column is still readable — just
+            // not that way.
+            if (in_array($column, $this->modelPropertyNames(), true)) {
+                $warnings[] = sprintf(
+                    'column "%s" has the same name as an Eloquent Model property, so $model->%s '
+                    .'returns the framework value, not the column. Read it with '
+                    ."getAttribute('%s') — it is left out of the docblock for that reason.",
+                    $column,
+                    $column,
+                    $column,
+                );
+
+                continue;
+            }
+
             $lines[] = sprintf(
                 ' * @property %s $%s',
                 $this->phpType($meta, $field),
-                $meta->getColumnName($field),
+                $column,
             );
         }
 
@@ -408,6 +453,15 @@ final class ProjectionGenerator
         $target = class_basename($assoc->targetEntity);
         $method = Str::camel($name);
         $type = $this->relationType($assoc);
+
+        // A method defined on the class wins over the same method from a
+        // trait, silently — so an association named `delete` would replace
+        // the write lock with a relation and PHP would not say a word.
+        // Every other name here would quietly replace framework behaviour
+        // the projection depends on.
+        if (method_exists(Model::class, $method) || method_exists(ReadOnlyModel::class, $method)) {
+            throw UnsupportedMapping::relationShadowsModelMethod($assoc->sourceEntity, $name, $method);
+        }
 
         // short() returns an FQCN when the relation class name clashes with
         // a generated model. That return value must be used — otherwise

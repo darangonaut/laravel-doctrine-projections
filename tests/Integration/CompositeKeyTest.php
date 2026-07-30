@@ -160,6 +160,38 @@ final class CompositeKeyTest extends TestCase
         self::assertSame(3, Capsule::connection()->table('seats')->count());
     }
 
+    /**
+     * `getKey()` used to answer null for every row, and Eloquent believes
+     * that answer: `is()` said two different seats were the same model,
+     * `unique()` turned three rows into none, `contains()` found a row
+     * that was not there, and `fresh()` on B1 handed back A1. All silent.
+     */
+    #[Test]
+    public function operations_that_identify_a_row_by_key_are_refused(): void
+    {
+        $seats = self::$model::query()->orderBy('row_letter')->orderBy('seat_number')->get();
+
+        self::assertCount(3, $seats, 'reading the rows is unaffected');
+
+        $operations = [
+            'getKey' => static fn () => $seats->first()?->getKey(),
+            'is' => static fn () => $seats->first()?->is($seats->last()),
+            'unique' => static fn () => $seats->unique(),
+            'modelKeys' => static fn () => $seats->modelKeys(),
+            'diff' => static fn () => $seats->diff($seats->take(1)),
+            'fresh' => static fn () => $seats->last()?->fresh(),
+        ];
+
+        foreach ($operations as $label => $operation) {
+            try {
+                $operation();
+                self::fail("{$label}() should have been refused");
+            } catch (UnsupportedMapping) {
+                // expected
+            }
+        }
+    }
+
     #[Test]
     public function bulk_writes_are_refused_and_the_rows_are_untouched(): void
     {

@@ -4,6 +4,41 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **`getKey()` on a composite-key projection refuses instead of answering
+  null.** Eloquent asks it whenever it needs to identify a row and takes
+  the answer at face value, so null for every row meant every row looked
+  like the same one — silently. `$a->is($b)` was true for different
+  seats, `unique()` turned three rows into none, `contains()` found a row
+  that was not there, `modelKeys()` gave `[null, null, null]`, and
+  `fresh()` on seat B1 handed back **A1**.
+
+  Reading never touches the key, so `where()`, `get()`, `pluck()`, casts,
+  ordering and `toArray()` are unaffected.
+
+### Added
+
+- **Columns that shadow an Eloquent `Model` property are reported.** A
+  column called `exists` is not readable as `$model->exists`: PHP finds
+  Model's own public property and never calls `__get`, so the answer is
+  "this row is persisted" while the column says otherwise. The generator
+  now warns and omits that column from the docblock, rather than telling
+  every IDE and analyser something untrue. `getAttribute('exists')` still
+  works, as does `toArray()`.
+
+- **Associations that shadow a `Model` method are refused.** A method
+  declared on the class silently replaces the one inherited from a trait,
+  so an association named `delete` would have swapped the write lock for
+  a relation with no warning from PHP at all.
+
+  Words reserved by *SQL* need none of this: Doctrine strips the
+  backticks its mapping asks for, and Eloquent quotes identifiers itself,
+  so a table called `order` and a column called `key` were already fine.
+  Now covered by tests.
+
 ## [0.3.3] — 2026-07-30
 
 ### Fixed

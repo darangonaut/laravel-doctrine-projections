@@ -45,6 +45,53 @@ final class UnsupportedMapping extends RuntimeException
     }
 
     /**
+     * A method declared on the class beats the same method inherited from
+     * a trait, and PHP reports nothing. An association named `delete`
+     * would therefore replace the write lock with a relation — the
+     * projection would go on looking read-only while accepting deletes.
+     *
+     * Unlike a shadowed column this cannot be worked around at the call
+     * site, so it is refused rather than warned about.
+     */
+    public static function relationShadowsModelMethod(string $entity, string $field, string $method): self
+    {
+        return new self(sprintf(
+            'The association %s::$%s would generate %s(), which already exists on Eloquent\'s '
+            .'Model or on the read-only trait. A method on the class silently replaces the '
+            .'inherited one, so the projection would lose that behaviour — including, for '
+            .'"delete", the write lock. Rename the association, or exclude this entity.',
+            $entity,
+            $field,
+            $method,
+        ));
+    }
+
+    /**
+     * Anything that identifies a row by its key is unanswerable without
+     * one, and Eloquent does not ask — it uses `getKey()` and believes the
+     * answer. With a composite key that answer was null for every row, so
+     * every such operation quietly agreed that all rows were the same one:
+     * `$a->is($b)` true for different seats, `unique()` collapsing three
+     * rows to none, `fresh()` on B1 handing back A1.
+     *
+     * Throwing turns each of those into an error at the call site instead.
+     * Reading — `where()`, `get()`, `pluck()`, casts, ordering — never
+     * touches the key and is unaffected.
+     */
+    public static function compositeKeyIdentity(string $operation, string $model): self
+    {
+        return new self(sprintf(
+            '%s::%s() cannot work: %s projects an entity with a composite primary key, so it '
+            .'has no single value identifying a row. Anything comparing models by key — is(), '
+            .'unique(), diff(), contains(), fresh(), modelKeys() — is unanswerable here; '
+            .'compare the key columns yourself.',
+            $model,
+            $operation,
+            $model,
+        ));
+    }
+
+    /**
      * `#[ORM\OrderBy]` names fields on the target entity, which have to be
      * resolved to columns before Eloquent can sort by them. If one cannot
      * be resolved, emitting the relation without its ordering would leave
