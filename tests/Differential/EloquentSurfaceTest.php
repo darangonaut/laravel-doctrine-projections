@@ -9,6 +9,7 @@ use Darangonaut\DoctrineProjections\Tests\Fixtures\DeepInheritance\CardPayment;
 use Darangonaut\DoctrineProjections\Tests\Fixtures\DeepInheritance\CashPayment;
 use Darangonaut\DoctrineProjections\Tests\Fixtures\DeepInheritance\CorporateCardPayment;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Pagination\Paginator;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -74,9 +75,17 @@ final class EloquentSurfaceTest extends TestCase
         self::assertSame([250, 900], $lazy);
     }
 
+    /**
+     * Outside HTTP there is no request to read a page number from, so the
+     * resolvers are set here rather than letting the paginator reach into
+     * a container this harness does not have.
+     */
     #[Test]
     public function pagination_counts_only_the_scoped_rows(): void
     {
+        Paginator::currentPageResolver(static fn (): int => 1);
+        Paginator::currentPathResolver(static fn (): string => 'http://localhost');
+
         $page = $this->card()::query()->orderBy('id')->paginate(1);
 
         self::assertSame(2, $page->total(), 'the count query has to carry the scope too');
