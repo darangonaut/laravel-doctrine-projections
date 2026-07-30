@@ -22,6 +22,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 - `--check` on `doctrine:projections` for CI: fails when regeneration would
   change the committed files.
 - Optional `SharedPdoDriver` so Doctrine can run on Laravel's own PDO.
+- PHPStan at level max in CI, with no baseline and no suppressions.
 
 ### Refused on purpose
 

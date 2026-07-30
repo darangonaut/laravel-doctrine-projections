@@ -29,66 +29,92 @@ use Illuminate\Database\Eloquent\Builder;
  */
 class ReadOnlyBuilder extends Builder
 {
+    /** @param  array<int|string, mixed>  $values */
     public function insert(array $values): never
     {
         $this->refuse('insert');
     }
 
-    public function insertGetId(array $values, $sequence = null): never
+    /** @param  array<string, mixed>  $values */
+    public function insertGetId(array $values, ?string $sequence = null): never
     {
         $this->refuse('insertGetId');
     }
 
+    /** @param  array<int|string, mixed>  $values */
     public function insertOrIgnore(array $values): never
     {
         $this->refuse('insertOrIgnore');
     }
 
-    public function insertUsing(array $columns, $query): never
+    /** @param  array<int, string>  $columns */
+    public function insertUsing(array $columns, mixed $query): never
     {
         $this->refuse('insertUsing');
     }
 
-    public function insertOrIgnoreUsing(array $columns, $query): never
+    /** @param  array<int, string>  $columns */
+    public function insertOrIgnoreUsing(array $columns, mixed $query): never
     {
         $this->refuse('insertOrIgnoreUsing');
     }
 
+    /** @param  array<string, mixed>  $values */
     public function update(array $values): never
     {
         $this->refuse('update');
     }
 
+    /** @param  array<string, mixed>  $values */
     public function updateFrom(array $values): never
     {
         $this->refuse('updateFrom');
     }
 
-    public function updateOrInsert(array $attributes, $values = []): never
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $values
+     */
+    public function updateOrInsert(array $attributes, array $values = []): never
     {
         $this->refuse('updateOrInsert');
     }
 
+    /**
+     * @param  array<int, array<string, mixed>>  $values
+     * @param  array<int, string>|string  $uniqueBy
+     * @param  array<int, string>|null  $update
+     */
     public function upsert(array $values, $uniqueBy, $update = null): never
     {
         $this->refuse('upsert');
     }
 
+    /** @param  array<string, mixed>  $extra */
     public function increment($column, $amount = 1, array $extra = []): never
     {
         $this->refuse('increment');
     }
 
+    /**
+     * @param  array<string, float|int|numeric-string>  $columns
+     * @param  array<string, mixed>  $extra
+     */
     public function incrementEach(array $columns, array $extra = []): never
     {
         $this->refuse('incrementEach');
     }
 
+    /** @param  array<string, mixed>  $extra */
     public function decrement($column, $amount = 1, array $extra = []): never
     {
         $this->refuse('decrement');
     }
 
+    /**
+     * @param  array<string, float|int|numeric-string>  $columns
+     * @param  array<string, mixed>  $extra
+     */
     public function decrementEach(array $columns, array $extra = []): never
     {
         $this->refuse('decrementEach');
@@ -98,6 +124,10 @@ class ReadOnlyBuilder extends Builder
      * Transitively this would be caught by firstOrCreate's model events,
      * but relying on someone else's implementation is brittle and the
      * error would point at an unrelated path.
+     */
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @param  array<string, mixed>  $extra
      */
     public function incrementOrCreate(
         array $attributes,
@@ -109,7 +139,11 @@ class ReadOnlyBuilder extends Builder
         $this->refuse('incrementOrCreate');
     }
 
-    /** Writes via toBase(), so the update() override above does not see it. */
+    /**
+     * Writes via toBase(), so the update() override above does not see it.
+     *
+     * @param  array<int, string>|string|null  $column
+     */
     public function touch($column = null): never
     {
         $this->refuse('touch');

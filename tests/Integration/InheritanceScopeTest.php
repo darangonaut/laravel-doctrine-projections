@@ -7,6 +7,7 @@ namespace Darangonaut\DoctrineProjections\Tests\Integration;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Tests\EntityManagerFactory;
 use Illuminate\Database\Capsule\Manager as Capsule;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -71,11 +72,29 @@ final class InheritanceScopeTest extends TestCase
         @rmdir(self::$dir);
     }
 
+    /**
+     * The classes are written out and required at runtime, so their names
+     * only become known to PHP — never to static analysis. This is the one
+     * boundary where the type has to be asserted rather than inferred.
+     *
+     * @return class-string<Model>
+     */
+    private static function projection(string $name): string
+    {
+        $class = __NAMESPACE__.'\\Sti\\'.$name;
+
+        self::assertTrue(class_exists($class), $class.' was not generated');
+        self::assertTrue(is_subclass_of($class, Model::class));
+
+        /** @var class-string<Model> */
+        return $class;
+    }
+
     #[Test]
     public function a_subclass_sees_only_its_own_rows(): void
     {
-        $card = __NAMESPACE__.'\\Sti\\CardPayment';
-        $cash = __NAMESPACE__.'\\Sti\\CashPayment';
+        $card = self::projection('CardPayment');
+        $cash = self::projection('CashPayment');
 
         self::assertSame(2, $card::query()->count());
         self::assertSame(1, $cash::query()->count());
@@ -86,7 +105,7 @@ final class InheritanceScopeTest extends TestCase
     #[Test]
     public function the_root_sees_every_row(): void
     {
-        $payment = __NAMESPACE__.'\\Sti\\Payment';
+        $payment = self::projection('Payment');
 
         self::assertSame(3, $payment::query()->count());
     }
@@ -94,11 +113,13 @@ final class InheritanceScopeTest extends TestCase
     #[Test]
     public function the_scope_survives_find_and_aggregates(): void
     {
-        $card = __NAMESPACE__.'\\Sti\\CardPayment';
-        $cashRowId = (int) Capsule::connection()->table('payments')->where('kind', 'cash')->value('id');
+        $card = self::projection('CardPayment');
+        $cashRow = Capsule::connection()->table('payments')->where('kind', 'cash')->first();
+
+        self::assertNotNull($cashRow);
 
         // a cash row must be invisible to CardPayment even by primary key
-        self::assertNull($card::query()->find($cashRowId));
-        self::assertSame(350, (int) $card::query()->sum('amount'));
+        self::assertNull($card::query()->find($cashRow->id));
+        self::assertEquals(350, $card::query()->sum('amount'));
     }
 }

@@ -24,4 +24,20 @@ final class UnsupportedMapping extends RuntimeException
             ."\n\nUse SINGLE_TABLE inheritance, or exclude these entities from generation."
         );
     }
+
+    /**
+     * Doctrine's mapping classes split by side, and the resolution above
+     * assumes the counterpart of an inverse side is an owning side of the
+     * matching kind. If that ever fails, guessing would be worse than
+     * saying so.
+     */
+    public static function unexpectedOwningSide(string $target, string $actual): self
+    {
+        return new self(sprintf(
+            'Could not resolve the owning side of the association on %s — got %s. '
+            .'Please report this mapping.',
+            $target,
+            $actual,
+        ));
+    }
 }

@@ -228,14 +228,24 @@ than one that refuses:
 
 PHP 8.3+, Doctrine ORM 3.1+, DBAL 4, Laravel 11/12/13.
 
-## Testing
+## Testing and analysis
 
 ```bash
 composer install
-vendor/bin/phpunit
+vendor/bin/phpunit                    # 52 tests
+vendor/bin/phpstan analyse            # level max, no baseline
+vendor/bin/pint --test
 ```
 
-52 tests. The suite is deliberately split:
+PHPStan runs at **level max with no baseline and no `@phpstan-ignore`
+anywhere** — a package whose pitch is type safety has no business
+exempting itself. It earned its keep immediately: it found that the
+association handling accessed `joinColumns` without narrowing to an
+owning side, which is the same shape as the bug that once crashed the
+generator on the inverse side of a OneToOne.
+
+
+The suite is deliberately split:
 
 generation and SQL classification are pure transformations and run without
 a database, while the lock and the inheritance scope are verified against

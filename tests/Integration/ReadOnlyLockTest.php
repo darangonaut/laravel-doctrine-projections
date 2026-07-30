@@ -79,8 +79,8 @@ final class ReadOnlyLockTest extends TestCase
     {
         $book = ProjectedBook::with(['shelf', 'genres'])->findOrFail(1);
 
-        self::assertSame('Original', $book->title);
-        self::assertSame('Fiction', $book->shelf->name);
+        self::assertSame('Original', $book->getAttribute('title'));
+        self::assertSame('Fiction', $book->shelf?->getAttribute('name'));
         self::assertSame(['Novel'], $book->genres->pluck('name')->all());
         self::assertSame(1, ProjectedBook::query()->where('page_count', '>', 50)->count());
         self::assertSame(1, ProjectedShelf::withCount('books')->findOrFail(1)->books_count);
@@ -92,7 +92,7 @@ final class ReadOnlyLockTest extends TestCase
         // instance level — caught by model events
         yield 'save' => [function (): void {
             $b = ProjectedBook::findOrFail(1);
-            $b->title = 'Hacked';
+            $b->setAttribute('title', 'Hacked');
             $b->save();
         }];
         yield 'model update' => [fn () => ProjectedBook::findOrFail(1)->update(['title' => 'Hacked'])];
@@ -128,18 +128,21 @@ final class ReadOnlyLockTest extends TestCase
     #[DataProvider('writeAttempts')]
     public function every_write_path_is_refused(callable $attempt): void
     {
+        $blocked = false;
+
         try {
             $attempt();
-            self::fail('the write was not blocked');
         } catch (ReadOnlyProjection) {
-            self::assertTrue(true);
+            $blocked = true;
         }
 
+        self::assertTrue($blocked, 'the write was not blocked');
+
         // and nothing moved
-        $row = self::$capsule->getConnection()->table('books')->where('id', 1)->first();
-        self::assertSame('Original', $row->title);
-        self::assertSame(100, (int) $row->page_count);
-        self::assertNull($row->touched_at);
+        $row = (array) self::$capsule->getConnection()->table('books')->where('id', 1)->first();
+        self::assertSame('Original', $row['title']);
+        self::assertEquals(100, $row['page_count']);
+        self::assertNull($row['touched_at']);
         self::assertSame(1, self::$capsule->getConnection()->table('books')->count());
         self::assertSame(1, self::$capsule->getConnection()->table('book_genre')->count());
     }

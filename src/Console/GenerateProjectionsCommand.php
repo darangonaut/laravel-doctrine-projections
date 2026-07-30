@@ -7,6 +7,7 @@ namespace Darangonaut\DoctrineProjections\Console;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
+use Darangonaut\DoctrineProjections\Support\Config;
 use Doctrine\ORM\EntityManagerInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -29,8 +30,8 @@ final class GenerateProjectionsCommand extends Command
 
     public function handle(EntityManagerInterface $em): int
     {
-        $namespace = (string) config('doctrine-projections.namespace');
-        $path = (string) config('doctrine-projections.path');
+        $namespace = Config::string('doctrine-projections.namespace');
+        $path = Config::string('doctrine-projections.path');
 
         try {
             $projections = (new ProjectionGenerator($em, $namespace))->generate();
@@ -59,7 +60,7 @@ final class GenerateProjectionsCommand extends Command
         if (! $this->option('dry')) {
             File::ensureDirectoryExists($path);
 
-            foreach (File::glob($path.'/*.php') as $stale) {
+            foreach (self::phpFilesIn($path) as $stale) {
                 File::delete($stale);
             }
         }
@@ -82,6 +83,12 @@ final class GenerateProjectionsCommand extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    /** @return list<string> */
+    private static function phpFilesIn(string $dir): array
+    {
+        return array_values(array_filter(File::glob($dir.'/*.php'), is_string(...)));
     }
 
     /**
@@ -111,7 +118,7 @@ final class GenerateProjectionsCommand extends Command
             }
         }
 
-        foreach (File::glob($path.'/*.php') as $existing) {
+        foreach (self::phpFilesIn($path) as $existing) {
             $class = pathinfo($existing, PATHINFO_FILENAME);
 
             if (! isset($projections[$class])) {

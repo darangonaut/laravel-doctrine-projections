@@ -44,3 +44,24 @@ jobs:
 
       - name: Style
         run: vendor/bin/pint --test
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    name: PHPStan
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo, pdo_sqlite
+          coverage: none
+
+      - name: Install
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      # level max, no baseline, no ignores — a package selling type safety
+      # should hold itself to it
+      - name: Analyse
+        run: vendor/bin/phpstan analyse --no-progress

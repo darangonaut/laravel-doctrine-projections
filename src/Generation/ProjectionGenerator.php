@@ -9,10 +9,13 @@ use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Mapping\InverseSideMapping;
 use Doctrine\ORM\Mapping\ManyToManyInverseSideMapping;
 use Doctrine\ORM\Mapping\ManyToManyOwningSideMapping;
 use Doctrine\ORM\Mapping\OneToOneInverseSideMapping;
+use Doctrine\ORM\Mapping\ToOneOwningSideMapping;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -31,11 +34,11 @@ use Illuminate\Support\Str;
  */
 final class ProjectionGenerator
 {
-    /** @var array<string, string> import basename => FQCN, for the model being rendered */
-    private array $uses = [];
-
     /** @var list<string> basenames of every generated model — reserved names */
     private array $reserved = [];
+
+    /** Imports for the class currently being rendered. */
+    private Imports $imports;
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -90,10 +93,13 @@ final class ProjectionGenerator
      */
     private function guardAgainstUnsupportedInheritance(array $metadata): void
     {
-        $joined = array_values(array_map(
-            static fn (ClassMetadata $meta): string => $meta->getName(),
-            array_filter($metadata, static fn (ClassMetadata $meta): bool => $meta->isInheritanceTypeJoined()),
-        ));
+        $joined = [];
+
+        foreach ($metadata as $meta) {
+            if ($meta->isInheritanceTypeJoined()) {
+                $joined[] = $meta->getName();
+            }
+        }
 
         if ($joined !== []) {
             throw UnsupportedMapping::joinedInheritance($joined);
@@ -128,23 +134,24 @@ final class ProjectionGenerator
     private function render(ClassMetadata $meta): RenderedProjection
     {
         $class = class_basename($meta->getName());
-        $this->uses = [];
+        $this->imports = new Imports($class, $this->reserved);
         $warnings = [];
 
-        // The base class and the trait go through short() too — an entity
-        // may be named Model or ReadOnlyModel, and then they must be
-        // fully qualified.
-        $traitRef = $this->short(ReadOnlyModel::class, $class);
-        $modelRef = $this->short(Model::class, $class);
+        // The base class and the trait go through the collector too — an
+        // entity may be named Model or ReadOnlyModel, and then they must
+        // be fully qualified.
+        $traitRef = $this->imports->reference(ReadOnlyModel::class);
+        $modelRef = $this->imports->reference(Model::class);
 
         // The body is assembled before the header, because assembling it
         // is what collects the imports.
-        $members = $this->members($meta, $class, $warnings);
-        $docblock = $this->propertyDocblock($meta, $class);
+        $members = $this->members($meta, $warnings);
+        $docblock = $this->propertyDocblock($meta);
 
-        $fqcns = array_values($this->uses);
-        sort($fqcns);
-        $useBlock = implode("\n", array_map(static fn (string $u): string => "use {$u};", $fqcns));
+        $useBlock = implode("\n", array_map(
+            static fn (string $fqcn): string => "use {$fqcn};",
+            $this->imports->all(),
+        ));
 
         $code = sprintf(
             "<?php\n\ndeclare(strict_types=1);\n\nnamespace %s;\n\n%s\n\n/**\n"
@@ -169,38 +176,15 @@ final class ProjectionGenerator
         return new RenderedProjection($class, $meta->getName(), $meta->getTableName(), $code, $warnings);
     }
 
-    /**
-     * Short name, registering the import. Falls back to the FQCN when the
-     * basename collides with the model itself, another generated model, or
-     * an import already taken by a different class.
-     */
-    private function short(string $fqcn, string $modelClass): string
-    {
-        $fqcn = ltrim($fqcn, '\\');
-        $base = class_basename($fqcn);
-
-        $collides = $base === $modelClass
-            || in_array($base, $this->reserved, true)
-            || (isset($this->uses[$base]) && $this->uses[$base] !== $fqcn);
-
-        if ($collides) {
-            return '\\'.$fqcn;
-        }
-
-        $this->uses[$base] = $fqcn;
-
-        return $base;
-    }
-
     /** @param ClassMetadata<object> $meta */
-    private function propertyDocblock(ClassMetadata $meta, string $modelClass): string
+    private function propertyDocblock(ClassMetadata $meta): string
     {
         $lines = [];
 
         foreach ($meta->getFieldNames() as $field) {
             $lines[] = sprintf(
                 ' * @property %s $%s',
-                $this->phpType($meta, $field, $modelClass),
+                $this->phpType($meta, $field),
                 $meta->getColumnName($field),
             );
         }
@@ -212,7 +196,7 @@ final class ProjectionGenerator
             if ($assoc->isToMany()) {
                 $lines[] = sprintf(
                     ' * @property %s<int, %s> $%s',
-                    $this->short(Collection::class, $modelClass),
+                    $this->imports->reference(Collection::class),
                     $target,
                     $property,
                 );
@@ -227,11 +211,16 @@ final class ProjectionGenerator
                 continue;
             }
 
-            $join = $assoc->joinColumns[0];
-            $nullable = $join->nullable ?? true;
+            $nullable = $assoc instanceof ToOneOwningSideMapping
+                ? ($assoc->joinColumns[0]->nullable ?? true)
+                : true;
 
             // The foreign key is not among the fields, but it is queried often.
-            $lines[] = sprintf(' * @property int%s $%s', $nullable ? '|null' : '', $join->name);
+            $lines[] = sprintf(
+                ' * @property int%s $%s',
+                $nullable ? '|null' : '',
+                $this->foreignKeyFor($assoc),
+            );
             $lines[] = sprintf(' * @property %s%s $%s', $target, $nullable ? '|null' : '', $property);
         }
 
@@ -242,10 +231,10 @@ final class ProjectionGenerator
      * @param  ClassMetadata<object>  $meta
      * @param  list<string>  $warnings
      */
-    private function members(ClassMetadata $meta, string $modelClass, array &$warnings): string
+    private function members(ClassMetadata $meta, array &$warnings): string
     {
         $out = sprintf("    protected \$table = '%s';\n", $meta->getTableName());
-        $out .= $this->keyMembers($meta, $modelClass, $warnings);
+        $out .= $this->keyMembers($meta, $warnings);
 
         // Doctrine manages timestamps itself.
         $out .= "\n    public \$timestamps = false;\n";
@@ -257,7 +246,7 @@ final class ProjectionGenerator
 
         $casts = [];
         foreach ($meta->getFieldNames() as $field) {
-            $cast = $this->castFor($meta, $field, $modelClass);
+            $cast = $this->castFor($meta, $field);
             if ($cast !== null) {
                 $casts[$meta->getColumnName($field)] = $cast;
             }
@@ -272,10 +261,10 @@ final class ProjectionGenerator
             $out .= "        ];\n    }\n";
         }
 
-        $out .= $this->discriminatorScope($meta, $modelClass);
+        $out .= $this->discriminatorScope($meta);
 
         foreach ($meta->getAssociationMappings() as $name => $assoc) {
-            $out .= $this->relation($name, $assoc, $modelClass);
+            $out .= $this->relation($name, $assoc);
         }
 
         return $out;
@@ -292,13 +281,16 @@ final class ProjectionGenerator
      *
      * @param  ClassMetadata<object>  $meta
      */
-    private function discriminatorScope(ClassMetadata $meta, string $modelClass): string
+    private function discriminatorScope(ClassMetadata $meta): string
     {
-        if (! $meta->isInheritanceTypeSingleTable() || ($meta->discriminatorValue ?? null) === null) {
+        $column = $meta->discriminatorColumn?->name;
+        $value = $meta->discriminatorValue;
+
+        if (! $meta->isInheritanceTypeSingleTable() || $column === null || ! is_scalar($value)) {
             return '';
         }
 
-        $builder = $this->short(Builder::class, $modelClass);
+        $builder = $this->imports->reference(Builder::class);
 
         return sprintf(
             "\n    /** Single table inheritance — this class owns only its own rows. */\n"
@@ -307,8 +299,8 @@ final class ProjectionGenerator
             ."            \$query->where('%s', '%s');\n"
             ."        });\n    }\n",
             $builder,
-            $meta->discriminatorColumn['name'],
-            $meta->discriminatorValue,
+            $column,
+            (string) $value,
         );
     }
 
@@ -321,14 +313,14 @@ final class ProjectionGenerator
      * @param  ClassMetadata<object>  $meta
      * @param  list<string>  $warnings
      */
-    private function keyMembers(ClassMetadata $meta, string $modelClass, array &$warnings): string
+    private function keyMembers(ClassMetadata $meta, array &$warnings): string
     {
         $idFields = $meta->getIdentifierFieldNames();
 
         if (count($idFields) > 1) {
             $warnings[] = sprintf(
                 '%s has a composite key (%s) — Eloquent does not support one: find() and getKey() will not work, reading via where() will.',
-                $modelClass,
+                class_basename($meta->getName()),
                 implode(', ', $idFields),
             );
 
@@ -358,7 +350,7 @@ final class ProjectionGenerator
         return $out;
     }
 
-    private function relationType(mixed $assoc): string
+    private function relationType(AssociationMapping $assoc): string
     {
         return match (true) {
             $assoc instanceof ManyToManyOwningSideMapping,
@@ -369,7 +361,7 @@ final class ProjectionGenerator
         };
     }
 
-    private function relation(string $name, mixed $assoc, string $modelClass): string
+    private function relation(string $name, AssociationMapping $assoc): string
     {
         $target = class_basename($assoc->targetEntity);
         $method = Str::camel($name);
@@ -379,13 +371,9 @@ final class ProjectionGenerator
         // a generated model. That return value must be used — otherwise
         // `HasMany` in the body would resolve to the projection of the same
         // name and the call would throw a TypeError.
-        $typeRef = $this->short('Illuminate\\Database\\Eloquent\\Relations\\'.$type, $modelClass);
+        $typeRef = $this->imports->reference('Illuminate\\Database\\Eloquent\\Relations\\'.$type);
 
-        $args = match ($type) {
-            'BelongsToMany' => $this->manyToManyArgs($assoc),
-            'HasMany', 'HasOne' => $this->inverseSideArgs($assoc),
-            default => sprintf("'%s'", $assoc->joinColumns[0]->name),
-        };
+        $args = $this->relationArgs($assoc, $type);
 
         return sprintf(
             "\n    /** @return %s<%s, \$this> */\n"
@@ -403,45 +391,94 @@ final class ProjectionGenerator
     }
 
     /**
-     * The join table is always declared by the owning side. From the inverse
-     * side it has to be reached through mappedBy — with the keys swapped.
+     * Relation arguments, resolved from the mapping rather than guessed.
+     *
+     * Which side declares what is the whole subtlety here: an owning side
+     * carries the join columns, an inverse side only knows the property
+     * name on the other class. Getting this wrong is how the generator
+     * once crashed on the inverse side of a OneToOne.
      */
-    private function manyToManyArgs(mixed $assoc): string
+    private function relationArgs(AssociationMapping $assoc, string $type): string
+    {
+        if ($type === 'BelongsToMany') {
+            [$table, $foreign, $related] = $this->joinTableColumns($assoc);
+
+            return sprintf("'%s', '%s', '%s'", $table, $foreign, $related);
+        }
+
+        return sprintf("'%s'", $this->foreignKeyFor($assoc));
+    }
+
+    /**
+     * @return array{string, string, string} table, foreign pivot key, related pivot key
+     */
+    private function joinTableColumns(AssociationMapping $assoc): array
     {
         if ($assoc instanceof ManyToManyOwningSideMapping) {
             $joinTable = $assoc->joinTable;
-            $foreign = $joinTable->joinColumns[0]->name;
-            $related = $joinTable->inverseJoinColumns[0]->name;
-        } else {
-            $owning = $this->em
-                ->getClassMetadata($assoc->targetEntity)
-                ->getAssociationMapping($assoc->mappedBy);
 
-            $joinTable = $owning->joinTable;
-            $foreign = $joinTable->inverseJoinColumns[0]->name;
-            $related = $joinTable->joinColumns[0]->name;
+            return [
+                $joinTable->name,
+                $joinTable->joinColumns[0]->name,
+                $joinTable->inverseJoinColumns[0]->name,
+            ];
         }
 
-        return sprintf("'%s', '%s', '%s'", $joinTable->name, $foreign, $related);
+        // The join table is declared by the owning side; from here it has to
+        // be reached through mappedBy — with the keys swapped.
+        $owning = $this->owningSideOf($assoc);
+
+        if (! $owning instanceof ManyToManyOwningSideMapping) {
+            throw UnsupportedMapping::unexpectedOwningSide($assoc->targetEntity, $owning::class);
+        }
+
+        $joinTable = $owning->joinTable;
+
+        return [
+            $joinTable->name,
+            $joinTable->inverseJoinColumns[0]->name,
+            $joinTable->joinColumns[0]->name,
+        ];
     }
 
-    /** The FK for hasMany/hasOne sits on the other side, under the mappedBy name. */
-    private function inverseSideArgs(mixed $assoc): string
+    /**
+     * The foreign key column. On an owning side it is declared here; on an
+     * inverse side it lives on the other class, under the mappedBy name.
+     */
+    private function foreignKeyFor(AssociationMapping $assoc): string
     {
-        $owning = $this->em
-            ->getClassMetadata($assoc->targetEntity)
-            ->getAssociationMapping($assoc->mappedBy);
+        if ($assoc instanceof ToOneOwningSideMapping) {
+            return $assoc->joinColumns[0]->name;
+        }
 
-        return sprintf("'%s'", $owning->joinColumns[0]->name);
+        $owning = $this->owningSideOf($assoc);
+
+        if (! $owning instanceof ToOneOwningSideMapping) {
+            throw UnsupportedMapping::unexpectedOwningSide($assoc->targetEntity, $owning::class);
+        }
+
+        return $owning->joinColumns[0]->name;
+    }
+
+    private function owningSideOf(AssociationMapping $assoc): AssociationMapping
+    {
+        if (! $assoc instanceof InverseSideMapping) {
+            throw UnsupportedMapping::unexpectedOwningSide($assoc->targetEntity, $assoc::class);
+        }
+
+        /** @var class-string $target */
+        $target = $assoc->targetEntity;
+
+        return $this->em->getClassMetadata($target)->getAssociationMapping($assoc->mappedBy);
     }
 
     /** @param ClassMetadata<object> $meta */
-    private function castFor(ClassMetadata $meta, string $field, string $modelClass): ?string
+    private function castFor(ClassMetadata $meta, string $field): ?string
     {
         $enum = $meta->getFieldMapping($field)->enumType ?? null;
 
         if ($enum !== null) {
-            return $this->short($enum, $modelClass).'::class';
+            return $this->imports->reference($enum).'::class';
         }
 
         return match ($meta->getTypeOfField($field)) {
@@ -457,20 +494,20 @@ final class ProjectionGenerator
     }
 
     /** @param ClassMetadata<object> $meta */
-    private function phpType(ClassMetadata $meta, string $field, string $modelClass): string
+    private function phpType(ClassMetadata $meta, string $field): string
     {
         $mapping = $meta->getFieldMapping($field);
         $enum = $mapping->enumType ?? null;
         $nullable = $mapping->nullable ?? false;
 
         $type = $enum !== null
-            ? $this->short($enum, $modelClass)
+            ? $this->imports->reference($enum)
             : match ($meta->getTypeOfField($field)) {
                 'integer', 'smallint', 'bigint' => 'int',
                 'boolean' => 'bool',
                 'decimal', 'float' => 'float',
                 'datetime', 'datetime_immutable', 'date', 'date_immutable',
-                'time', 'time_immutable' => $this->short(CarbonImmutable::class, $modelClass),
+                'time', 'time_immutable' => $this->imports->reference(CarbonImmutable::class),
                 'json' => 'array',
                 default => 'string',
             };

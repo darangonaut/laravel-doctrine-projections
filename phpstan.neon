@@ -1,0 +1,19 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/phpstan/phpstan-doctrine/extension.neon
+
+parameters:
+    level: max
+
+    paths:
+        - src
+        - tests
+
+    # Fixture entities are mapping declarations, not logic: their private
+    # properties exist so Doctrine can read them by reflection and are
+    # never touched from PHP. Analysing them only reports that.
+    excludePaths:
+        analyse:
+            - tests/Fixtures
+
+    treatPhpDocTypesAsCertain: true

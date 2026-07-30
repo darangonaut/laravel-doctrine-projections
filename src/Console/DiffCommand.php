@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Console;
 
 use Darangonaut\DoctrineProjections\Schema\StatementClassifier;
+use Darangonaut\DoctrineProjections\Support\Config;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Illuminate\Console\Command;
@@ -100,8 +101,9 @@ final class DiffCommand extends Command
     /** @param list<string> $sql */
     private function write(array $sql): string
     {
-        $name = preg_replace('/[^a-z0-9_]/', '_', strtolower((string) $this->option('name'))) ?: 'doctrine_diff';
-        $dir = (string) config('doctrine-projections.diff.path');
+        $option = $this->option('name');
+        $name = preg_replace('/[^a-z0-9_]/', '_', strtolower(is_string($option) ? $option : '')) ?: 'doctrine_diff';
+        $dir = Config::string('doctrine-projections.diff.path');
         $path = sprintf('%s/%s_%s.php', rtrim($dir, '/'), date('Y_m_d_His'), $name);
 
         $statements = implode("\n", array_map(
