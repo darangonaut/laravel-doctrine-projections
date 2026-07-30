@@ -482,28 +482,34 @@ final class ProjectionGenerator
         $values = $this->discriminatorValuesFor($meta);
 
         // One value is the common case and reads better as where().
-        if (count($values) === 1) {
-            return sprintf(
-                "\n    /** Single table inheritance — this class owns only its own rows. */\n"
-                ."    protected static function booted(): void\n    {\n"
-                ."        static::addGlobalScope('doctrine_discriminator', static function (%s \$query): void {\n"
-                ."            \$query->where('%s', '%s');\n"
-                ."        });\n    }\n",
-                $builder,
-                $column,
-                $values[0],
-            );
-        }
+        $condition = count($values) === 1
+            ? sprintf("\$query->where('%s', '%s');", $column, $values[0])
+            : sprintf("\$query->whereIn('%s', ['%s']);", $column, implode("', '", $values));
+
+        $title = count($values) === 1
+            ? 'this class owns only its own rows'
+            : 'this class and everything below it';
 
         return sprintf(
-            "\n    /** Single table inheritance — this class and everything below it. */\n"
+            "\n    /** Single table inheritance — %s. */\n"
             ."    protected static function booted(): void\n    {\n"
             ."        static::addGlobalScope('doctrine_discriminator', static function (%s \$query): void {\n"
-            ."            \$query->whereIn('%s', ['%s']);\n"
-            ."        });\n    }\n",
+            ."            %s\n"
+            ."        });\n    }\n"
+            ."\n    /**\n"
+            ."     * Laravel restores a queued model with newQueryWithoutScopes(), so a\n"
+            ."     * soft-deleted one can come back. A projection has no such case, and\n"
+            ."     * dropping the scope here meant find() and a job disagreed: the id of\n"
+            ."     * a sibling subclass was null through one and a wrongly-typed row\n"
+            ."     * through the other.\n"
+            ."     *\n"
+            ."     * @param  array<int, mixed>|mixed  \$ids\n"
+            ."     */\n"
+            ."    public function newQueryForRestoration(\$ids)\n    {\n"
+            ."        return \$this->newQuery()->whereKey(\$ids);\n    }\n",
+            $title,
             $builder,
-            $column,
-            implode("', '", $values),
+            $condition,
         );
     }
 

@@ -170,6 +170,11 @@ The scope covers a class **and everything below it**. A
 `CardPayment` queries — scoping to the class's own value alone is right
 for a leaf and an undercount for anything with children.
 
+A scoped projection also overrides `newQueryForRestoration()`. Laravel
+restores a queued model without scopes, so a soft-deleted one can come
+back; a projection has no such case, and dropping the discriminator meant
+`find()` and a queued job gave different answers for the same id.
+
 **Class table inheritance (JOINED) is refused.** The entity spans several
 tables and needs a join to reconstruct — an Eloquent model bound to one
 table cannot express that, and a projection quietly returning only the root

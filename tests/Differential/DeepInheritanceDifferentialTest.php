@@ -97,6 +97,46 @@ final class DeepInheritanceDifferentialTest extends TestCase
         self::assertSame($expected, $actual);
     }
 
+    /**
+     * Laravel restores a queued model with `newQueryWithoutScopes()`, so a
+     * soft-deleted one can come back. That dropped the discriminator too:
+     * the id of a cash payment was null through `CardPayment::find()` and
+     * a `CardPayment` holding cash payment data through a job.
+     */
+    #[Test]
+    public function restoring_a_queued_projection_keeps_the_discriminator(): void
+    {
+        $card = $this->harness->projection(class_basename(CardPayment::class));
+        $cash = $this->harness->projection(class_basename(CashPayment::class));
+
+        $cashRow = $cash::query()->first();
+
+        self::assertNotNull($cashRow);
+
+        $cashId = $cashRow->getKey();
+
+        self::assertNull($card::query()->find($cashId), 'find() applies the scope');
+        self::assertNull(
+            (new $card)->newQueryForRestoration([$cashId])->first(),
+            'and restoration has to agree with it',
+        );
+    }
+
+    #[Test]
+    public function a_projection_of_its_own_kind_still_restores(): void
+    {
+        $card = $this->harness->projection(class_basename(CardPayment::class));
+
+        $row = $card::query()->orderBy('id')->first();
+
+        self::assertNotNull($row);
+
+        $restored = (new $card)->newQueryForRestoration([$row->getKey()])->first();
+
+        self::assertNotNull($restored);
+        self::assertSame($row->getAttribute('amount'), $restored->getAttribute('amount'));
+    }
+
     #[Test]
     public function the_root_still_returns_everything(): void
     {
