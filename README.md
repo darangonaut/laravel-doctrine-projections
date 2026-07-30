@@ -202,7 +202,15 @@ columns would be worse than none.
 Name collisions are handled: an entity called `HasMany`, `Model` or
 `ReadOnlyModel` produces fully-qualified references instead of a broken
 import. Two entities sharing a short name are a hard error, because their
-projections would overwrite each other's file.
+projections would overwrite each other's file — compared
+case-insensitively, since on macOS and Windows `Order.php` and
+`order.php` are one file.
+
+**The projection namespace may not be one your entities live in.** That
+would give the generated model the entity's own fully qualified name, and
+whichever the autoloader reaches first wins: either a redeclaration
+fatal, or an application quietly handed a read-only model where it asked
+for the entity. Refused at generation.
 
 ### Reserved names
 

@@ -9,6 +9,7 @@ use Darangonaut\DoctrineProjections\Eloquent\Casts\SimpleArray;
 use Darangonaut\DoctrineProjections\Eloquent\Casts\TimeOfDay;
 use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
+use Darangonaut\DoctrineProjections\Exceptions\NamespaceCollision;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
@@ -83,6 +84,7 @@ final class ProjectionGenerator
 
         $this->guardAgainstUnsupportedInheritance($metadata);
         $this->guardAgainstDuplicateNames($metadata);
+        $this->guardAgainstNamespaceCollision($metadata);
 
         $this->reserved = array_map(
             static fn (ClassMetadata $meta): string => class_basename($meta->getName()),
@@ -197,6 +199,34 @@ final class ProjectionGenerator
 
         if ($clashes !== []) {
             throw DuplicateProjectionName::between($clashes);
+        }
+    }
+
+    /**
+     * A projection namespace that an entity already lives in would give
+     * the generated model the entity's own class name. Whichever the
+     * autoloader reaches first wins: either a redeclaration fatal, or an
+     * application quietly handed a read-only model where it asked for the
+     * entity, with writes failing for reasons nothing explains.
+     *
+     * @param  list<ClassMetadata<object>>  $metadata
+     *
+     * @throws NamespaceCollision
+     */
+    private function guardAgainstNamespaceCollision(array $metadata): void
+    {
+        $clashes = [];
+
+        foreach ($metadata as $meta) {
+            $entity = $meta->getName();
+
+            if ($this->namespace.'\\'.class_basename($entity) === $entity) {
+                $clashes[] = $entity;
+            }
+        }
+
+        if ($clashes !== []) {
+            throw NamespaceCollision::with($this->namespace, $clashes);
         }
     }
 
