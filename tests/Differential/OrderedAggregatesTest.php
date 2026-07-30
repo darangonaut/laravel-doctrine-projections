@@ -73,7 +73,11 @@ final class OrderedAggregatesTest extends TestCase
 
         self::assertNotNull($album);
         self::assertSame(4, $album->getAttribute('tracks_count'));
-        self::assertSame(6, (int) $album->getAttribute('tracks_sum_position'));
+
+        $sum = $album->getAttribute('tracks_sum_position');
+
+        self::assertIsNumeric($sum);
+        self::assertSame(6, (int) $sum);
     }
 
     #[Test]
@@ -100,7 +104,15 @@ final class OrderedAggregatesTest extends TestCase
 
         $positions = [];
         foreach ($tracks as $track) {
-            $positions[] = [(int) $track->getAttribute('disc_number'), (int) $track->getAttribute('position')];
+            self::assertInstanceOf(Model::class, $track);
+
+            $disc = $track->getAttribute('disc_number');
+            $position = $track->getAttribute('position');
+
+            self::assertIsInt($disc);
+            self::assertIsInt($position);
+
+            $positions[] = [$disc, $position];
         }
 
         self::assertSame([[2, 1], [2, 2], [1, 1], [1, 2]], $positions);
