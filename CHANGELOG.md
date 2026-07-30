@@ -4,6 +4,60 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-07-30
+
+The release that stops finding bugs by hand.
+
+Every earlier fix came from picking a mapping shape and checking it. That
+worked — eight bugs in eleven shapes — but it never converged, because
+the next shape nobody thought of was always the one still broken. This
+release adds a test that asserts the two sides *agree* rather than
+asserting a specific answer, and points it at three real databases.
+
+Two more bugs turned up on the way. Both had the same shape as the rest:
+nothing failed, the numbers were just wrong.
+
+### Fixed
+
+- **Single table inheritance scoped a class to its own discriminator
+  value, excluding its subclasses.** A `CorporateCardPayment` is a
+  `CardPayment`, and Doctrine returns it from `CardPayment` queries.
+  Measured on a three-level hierarchy: the entity returned 3 rows, the
+  projection returned 1. The scope now covers a class and everything
+  below it — `where()` for a leaf, `whereIn()` for a class with children.
+
+### Added
+
+- **A differential test suite.** Doctrine and the generated projections
+  run on one connection, and every mapped column, every association and
+  its order, and every collection's keys must match. It is written
+  against the mapping, so adding an entity to a fixture directory extends
+  the coverage without touching a test.
+
+- **CI runs it against SQLite, MySQL 8.4 and PostgreSQL 16.** The package
+  was built entirely on SQLite while making driver-specific claims —
+  that MySQL implicitly commits DDL, that a `CHANGE` preserves data.
+  Those claims had never executed. They do now, and they hold.
+
+- **Three divergences the package cannot remove are now reported at
+  generation** instead of living in a list of limitations:
+  - `indexBy` on a collection — Doctrine returns a map, an Eloquent
+    relation returns a list, so `$config->settings['timezone']` is the
+    setting through the entity and null through the projection.
+  - A custom Doctrine type — the entity gets `convertToPHPValue()`, the
+    projection gets what the column holds.
+  - **An enabled Doctrine filter** — the one with teeth. A filter narrows
+    entity queries and cannot narrow a projection: with a tenant filter
+    on, the entity returned 2 rows and the projection returned all 4.
+
+### Verified, unchanged
+
+- `#[ORM\Version]` is a plain column and is projected correctly,
+  including after Doctrine bumps it on flush.
+- A table or column named with an SQL reserved word needs nothing
+  special: Doctrine strips the backticks its own mapping asks for, and
+  Eloquent quotes identifiers itself.
+
 ## [0.4.1] — 2026-07-30
 
 Both found by checking what a to-one association onto a composite-key
@@ -251,6 +305,7 @@ First release.
 - Two entities sharing a short name — their projections would overwrite each
   other's file.
 
+[0.5.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.5.0
 [0.4.1]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.4.1
 [0.4.0]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.4.0
 [0.3.3]: https://github.com/darangonaut/laravel-doctrine-projections/releases/tag/v0.3.3

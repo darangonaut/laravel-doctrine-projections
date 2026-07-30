@@ -454,18 +454,35 @@ owning side, which is the same shape as the bug that once crashed the
 generator on the inverse side of a OneToOne.
 
 
-66 tests, in three parts:
+The suite has four parts.
 
-generation and SQL classification are pure transformations and run without
-a database; the lock and the inheritance scope are verified against real
-SQLite — the lock by attempting all 23 write paths, the scope by writing
-the generated files out, loading them and querying a table that holds rows
-of every subclass; and the commands run through a real Laravel application
-via Testbench, so the service provider and config are exercised rather than
+**Unit** — generation and SQL classification are pure transformations and
+run without a database.
+
+**Integration** — the lock and the inheritance scope against real SQLite:
+the lock by attempting all 23 write paths, the scope by writing the
+generated files out, loading them and querying a table that holds rows of
+every subclass. Asserting on emitted strings would have passed just as
+happily while the scope did nothing.
+
+**Feature** — the commands through a real Laravel application via
+Testbench, so the service provider and config are exercised rather than
 assumed.
 
-Asserting on emitted strings would have passed just as happily while the
-scope did nothing, which is why the middle group exists.
+**Differential** — Doctrine and the generated projections on one
+connection, answering the same questions. It asserts they *agree* rather
+than asserting a specific answer, which is the difference that matters:
+every bug this package has had was a plausible answer that happened not
+to be Doctrine's. Every mapped column, every association and its order,
+and every collection's keys are compared.
+
+```bash
+DIFFERENTIAL_DRIVER=mysql vendor/bin/phpunit --testsuite=differential
+```
+
+CI runs that suite against SQLite, MySQL 8.4 and PostgreSQL 16. It is
+written against the mapping, so adding an entity to a fixture directory
+extends the coverage without touching a test.
 
 ## License
 
