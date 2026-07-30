@@ -477,6 +477,14 @@ than one that refuses:
   calls that field `billing.street`; a generated property of that name
   would be unusable, so the column name is what is emitted.
 - **Second-level cache** does not apply. Projections query the table.
+- **`enumType` on a `json` column** is a mapping Doctrine accepts and then
+  cannot read: it writes `"high"` with the quotes and fails on the way
+  back with *"high" is not a valid backing value*. Broken before a
+  projection is involved — use a string column.
+- **Two generator runs at once** are not coordinated. They converge, since
+  both write the same output from the same mapping, but a reader looking
+  at the directory in between can see it half-empty. Run it once per
+  deploy.
 - **`indexBy` on a collection** cannot be carried across. Doctrine hands
   back a map keyed by the field; an Eloquent relation is always a list,
   with no hook to change that which survives regeneration. So
