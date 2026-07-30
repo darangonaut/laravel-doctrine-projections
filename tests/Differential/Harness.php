@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Tests\Differential;
 
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
+use Darangonaut\DoctrineProjections\Support\MappedTables;
 use Darangonaut\DoctrineProjections\Support\SharedPdoDriver;
 use Doctrine\DBAL\Connection as DbalConnection;
 use Doctrine\ORM\Configuration;
@@ -94,7 +95,31 @@ final class Harness
             $config,
         );
 
-        return new EntityManager($connection, $config);
+        $em = new EntityManager($connection, $config);
+
+        // Exactly what the README tells applications to do, and needed
+        // here for the same reason: on a server the database is shared
+        // between test classes, so without a filter Doctrine sees every
+        // other fixture's tables and offers to drop them.
+        $owned = MappedTables::of($em);
+
+        $connection->getConfiguration()->setSchemaAssetsFilter(
+            static fn (string $table): bool => in_array($table, $owned, true),
+        );
+
+        return $em;
+    }
+
+    /**
+     * A second mapping over the same connection.
+     *
+     * Lets a test set up one shape of the schema and then ask what
+     * another mapping would change about it — without hand-writing the
+     * DDL that differs per driver, which is the thing under test.
+     */
+    public function mappingFor(string $fixtureDir): EntityManagerInterface
+    {
+        return $this->entityManager($fixtureDir);
     }
 
     private function loadProjections(): void

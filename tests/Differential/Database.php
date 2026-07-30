@@ -80,11 +80,25 @@ final class Database
     {
         try {
             $pdo->query('SELECT 1');
-
-            return null;
         } catch (Throwable $e) {
             return sprintf('%s is not reachable: %s', self::driver(), $e->getMessage());
         }
+
+        // The one failure this suite could not see from its own output:
+        // a green run that quietly used a different database than the one
+        // it claims to cover. The connection is asked what it actually is.
+        $name = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $actual = is_string($name) ? $name : 'unknown';
+        $expected = match (self::driver()) {
+            'mariadb' => 'mysql',
+            default => self::driver(),
+        };
+
+        if ($actual !== $expected) {
+            return sprintf('asked for %s but connected to %s', $expected, $actual);
+        }
+
+        return null;
     }
 
     private static function env(string $name, string $default): string
