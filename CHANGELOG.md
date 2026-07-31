@@ -4,6 +4,72 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-07-31
+
+A second list of fifty scenarios, worked through end to end. Six fixes on
+fifty scenarios — 12 %, down from 24 % the round before. Four of the six
+were silent.
+
+**A minor, not a patch** — one class of query now returns different rows,
+and two commands stopped having a side effect they used to have. Each is
+in [UPGRADING.md](UPGRADING.md).
+
+### Fixed
+
+- **An abstract class under a single-table root with no concrete
+  subclasses returned every row in the table.** Nothing concrete can
+  carry its discriminator, so it owns no row — Doctrine answers 0 and
+  emits `WHERE 1=0`. The projection had no scope at all and answered with
+  the whole table, without a word.
+
+- **`--check` and `--dry` emptied the application's metadata cache.** A
+  production cache (APCu, file) is shared with every request in flight,
+  and two commands whose entire job is to report without changing
+  anything were clearing it — on a live server, every time CI ran. The
+  mapping is now read through a cache of the generator's own, which gets
+  the same fresh metadata and leaves the application's alone.
+
+- **A regenerate left a window with no models at all.** The output
+  directory was emptied before anything was written, so a request that
+  had not yet autoloaded a projection got "Class not found" until the run
+  finished. Files are now written first — each renamed over its target in
+  one step — and only genuinely orphaned files are deleted afterwards.
+
+- **A path containing `[`, `]`, `*` or `?` silently disabled the output
+  directory's safety net.** `glob()` reads those as pattern syntax across
+  the whole path, so a project checked out into `~/work [old]/app` listed
+  as empty: the guard stopped protecting hand-written models, stale
+  projections stopped being deleted, and `--check` stopped reporting
+  orphans. Listing now goes through `File::files()`.
+
+- **`save()` returned true when nothing had changed.** No UPDATE was
+  issued, so no layer refused it — and the caller learned that saving a
+  projection works. The promise is about the attempt.
+
+### Added
+
+- **A warning when the autoloader cannot see the generated classes.**
+  After `composer dump-autoload --classmap-authoritative` the loader
+  answers only from its classmap, so a projection written afterwards does
+  not exist as far as the application is concerned — and the failure
+  arrives much later as a bare "Class not found". Plain `--optimize`
+  keeps the PSR-4 fallback and is not reported.
+
+- README now says where in a deploy generation belongs, and what a
+  long-running worker (Octane, Swoole) does and does not pick up.
+
+### Verified, unchanged
+
+Each of these has a test and a commit: `#[ORM\AssociationOverride]`,
+custom naming strategies, two mapping drivers at once (attributes + XML),
+backtick-quoted reserved names, repository classes, lifecycle callbacks,
+entity listeners, `#[ORM\Cache]`, `#[ORM\Index]`, `#[ORM\UniqueConstraint]`,
+extending a projection in a subclass, dates under a non-UTC application
+timezone, a comma-decimal locale, `open_basedir`, and the same mapping
+path listed several times.
+
+The timezone one was written down as a suspicion. It did not hold.
+
 ## [0.7.0] — 2026-07-31
 
 The rest of the scenario list, worked through end to end. Five fixes; the

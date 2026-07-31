@@ -12,6 +12,35 @@ php artisan doctrine:projections
 The generated directory is build output. If you commit it, commit the
 result; if you generate on deploy, nothing to do.
 
+## To 0.8 from 0.7
+
+**An abstract class under a single-table root with no concrete subclasses
+now returns nothing.** It used to return every row in the table, which is
+what having no scope at all amounts to. Doctrine answers 0 for the same
+question. If you were relying on such a projection to hand back rows, the
+class you actually want is the root, or the abstract class's concrete
+descendant.
+
+**`--check` and `--dry` no longer clear the application's metadata
+cache.** They were doing it as a side effect of reading fresh metadata,
+and on a live server that meant emptying a cache shared with every
+request in flight. Nothing about the commands' output changes. If your
+deploy was relying on `doctrine:projections --check` to clear a stale
+APCu metadata cache, clear it explicitly instead — that was never what
+the flag meant.
+
+**A regenerate no longer empties the output directory first.** Files are
+written and renamed over their targets, and only files whose entity is
+gone are deleted. Nothing to change; the difference is that an
+application serving requests no longer sees a moment without its models.
+A transient `.php.tmp` file exists during the run — if you match on the
+directory contents in a build script, match `*.php`.
+
+**The command now warns when the autoloader cannot see what it just
+generated.** This fires after `composer dump-autoload
+--classmap-authoritative`. Generate before dumping the autoloader and it
+does not come up; plain `--optimize` never triggers it.
+
 ## To 0.7 from 0.6
 
 **A projection namespace that your entities live in is now refused.** It
