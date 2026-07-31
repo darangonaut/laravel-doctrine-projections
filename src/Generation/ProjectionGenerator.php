@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use ReflectionClass;
 use ReflectionProperty;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 /**
  * Renders read-only Eloquent models from Doctrine metadata.
@@ -71,12 +72,8 @@ final class ProjectionGenerator
      */
     public function generate(): array
     {
-        // Production metadata cache survives a deploy — without clearing it
-        // the models would be generated from yesterday's mapping.
-        $this->em->getConfiguration()->getMetadataCache()?->clear();
-
         $metadata = array_values(array_filter(
-            $this->em->getMetadataFactory()->getAllMetadata(),
+            $this->freshMetadata(),
             fn (ClassMetadata $meta): bool => ! $meta->isMappedSuperclass
                 && ! $meta->isEmbeddedClass
                 && $this->filter->accepts($meta->getName()),
@@ -111,6 +108,51 @@ final class ProjectionGenerator
         }
 
         return $rendered;
+    }
+
+    /**
+     * The mapping as it is on disk, read without touching the
+     * application's metadata cache.
+     *
+     * A production metadata cache (APCu, file) survives a deploy, so
+     * reading through it would generate models from yesterday's mapping.
+     * The obvious fix was to clear it — and that was the fix here, until
+     * it turned out `--check` and `--dry` go through this method too. A
+     * command whose whole job is to report without changing anything was
+     * emptying a cache shared with every request in flight, on a live
+     * server, every time CI ran it.
+     *
+     * Reading through a cache of our own gets the same fresh metadata
+     * without that: the factory finds nothing in it and rebuilds from the
+     * mapping files, exactly as it would after a clear.
+     *
+     * @return list<ClassMetadata<object>>
+     */
+    private function freshMetadata(): array
+    {
+        $configuration = $this->em->getConfiguration();
+        $applicationCache = $configuration->getMetadataCache();
+
+        $factory = $this->em->getMetadataFactory();
+
+        if ($applicationCache === null) {
+            return $factory->getAllMetadata();
+        }
+
+        $ours = new ArrayAdapter;
+
+        // Both, because the factory copies the pool the first time it
+        // initialises: setting it on the Configuration alone would reach
+        // only a factory that has not been used yet.
+        $configuration->setMetadataCache($ours);
+        $factory->setCache($ours);
+
+        try {
+            return $factory->getAllMetadata();
+        } finally {
+            $configuration->setMetadataCache($applicationCache);
+            $factory->setCache($applicationCache);
+        }
     }
 
     /**
