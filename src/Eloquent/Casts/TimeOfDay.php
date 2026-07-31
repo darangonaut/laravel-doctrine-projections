@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Eloquent\Casts;
 
 use Carbon\CarbonImmutable;
-use Darangonaut\DoctrineProjections\Exceptions\ReadOnlyProjection;
+use DateTimeInterface;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Model;
 
@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Model;
  * Doctrine anchors a time at the epoch (`createFromFormat('!H:i:s')`);
  * this does the same, so the two sides describe the same value.
  *
- * @implements CastsAttributes<CarbonImmutable, never>
+ * @implements CastsAttributes<CarbonImmutable, CarbonImmutable|string|null>
  */
 final class TimeOfDay implements CastsAttributes
 {
@@ -46,9 +46,37 @@ final class TimeOfDay implements CastsAttributes
         return $time instanceof CarbonImmutable ? $time : null;
     }
 
-    /** @param  array<string, mixed>  $attributes */
-    public function set(Model $model, string $key, mixed $value, array $attributes): never
+    /**
+     * Back to what the column holds.
+     *
+     * This used to throw, on the reasoning that a read-only model has no
+     * business being written to. It is not only user writes that come
+     * through here: Eloquent flushes its cached cast objects back into
+     * the attribute array on `getAttributes()`, which `toJson()`,
+     * `refresh()`, `getDirty()` and serializing a model for a queue or a
+     * cache all reach. So `toJson()` on any projection with a time column
+     * threw ReadOnlyProjection — a read, refused.
+     *
+     * Nothing is weakened by converting instead. The lock is on
+     * persistence — save(), delete(), the builder, the model events — and
+     * every other column on a projection already accepts an in-memory
+     * assignment that goes nowhere.
+     *
+     * The format is Doctrine's own for a time column.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, string|null>
+     */
+    public function set(Model $model, string $key, mixed $value, array $attributes): array
     {
-        throw ReadOnlyProjection::attemptedTo('set '.$key, $model::class);
+        if ($value === null || $value === '') {
+            return [$key => null];
+        }
+
+        if ($value instanceof DateTimeInterface) {
+            return [$key => $value->format('H:i:s')];
+        }
+
+        return [$key => $value];
     }
 }

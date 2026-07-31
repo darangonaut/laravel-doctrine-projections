@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Darangonaut\DoctrineProjections\Eloquent\Casts;
 
-use Darangonaut\DoctrineProjections\Exceptions\ReadOnlyProjection;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
 use Illuminate\Database\Eloquent\Model;
 
@@ -18,7 +17,7 @@ use Illuminate\Database\Eloquent\Model;
  * Matches `SimpleArrayType::convertToPHPValue()`, null included — Doctrine
  * returns an empty array there rather than null.
  *
- * @implements CastsAttributes<list<string>, never>
+ * @implements CastsAttributes<list<string>, iterable<mixed>|string|null>
  */
 final class SimpleArray implements CastsAttributes
 {
@@ -42,9 +41,37 @@ final class SimpleArray implements CastsAttributes
         return is_scalar($value) ? explode(',', (string) $value) : [];
     }
 
-    /** @param  array<string, mixed>  $attributes */
-    public function set(Model $model, string $key, mixed $value, array $attributes): never
+    /**
+     * Back to the comma-separated string the column holds.
+     *
+     * Throwing here refused reads, not writes: Eloquent flushes cached
+     * cast objects back into the attribute array inside
+     * `getAttributes()`, which `toJson()`, `refresh()` and serializing a
+     * model all go through. See TimeOfDay::set() for the whole story.
+     *
+     * Doctrine writes null rather than an empty string for an empty list,
+     * and this matches it so a round trip through the cast lands on the
+     * same value the entity would have stored.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, string|null>
+     */
+    public function set(Model $model, string $key, mixed $value, array $attributes): array
     {
-        throw ReadOnlyProjection::attemptedTo('set '.$key, $model::class);
+        if ($value === null) {
+            return [$key => null];
+        }
+
+        if (is_iterable($value)) {
+            $items = [];
+
+            foreach ($value as $item) {
+                $items[] = is_scalar($item) ? (string) $item : '';
+            }
+
+            return [$key => $items === [] ? null : implode(',', $items)];
+        }
+
+        return [$key => $value];
     }
 }
