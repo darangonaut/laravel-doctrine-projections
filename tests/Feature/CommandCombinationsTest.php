@@ -79,6 +79,28 @@ final class CommandCombinationsTest extends TestCase
         $this->command('doctrine:projections --dry --check')->assertSuccessful();
     }
 
+    /**
+     * What an upgrade looks like from the other side: the files on disk
+     * were written by an older version of this package, so regenerating
+     * changes them. `--check` has to say which file and why, or the
+     * failure reads as "something is wrong" with no way in.
+     */
+    #[Test]
+    public function check_names_the_file_when_an_older_version_wrote_it(): void
+    {
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        $file = $this->output.'/Account.php';
+
+        // an older generator emitted the same class with one line less
+        File::put($file, str_replace("public \$timestamps = false;\n\n", '', File::get($file)));
+
+        $this->command('doctrine:projections --check')
+            ->expectsOutputToContain('Account — out of date')
+            ->expectsOutputToContain('doctrine:projections')
+            ->assertFailed();
+    }
+
     #[Test]
     public function a_diff_against_an_empty_database_creates_every_table(): void
     {
