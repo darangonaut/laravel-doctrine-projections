@@ -71,7 +71,8 @@ final class MixedWithOrdinaryModelsTest extends TestCase
 
         $query = Ledger::query()->whereHas('cards');
 
-        self::assertStringContainsString('"kind" = ?', $query->toSql());
+        // quote-agnostic: MySQL uses backticks where SQLite uses quotes
+        self::assertMatchesRegularExpression('/\bkind\b.{0,3}= \?/', $query->toSql());
         self::assertSame(['card'], $query->getBindings());
         self::assertSame(1, $query->count(), 'the cash payment must not match');
     }
