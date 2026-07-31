@@ -60,7 +60,7 @@ final class Harness
         $metadata = $this->em->getMetadataFactory()->getAllMetadata();
 
         // A server keeps its schema between runs, unlike sqlite :memory:.
-        (new SchemaTool($this->em))->dropSchema($metadata);
+        $this->dropEverything();
         $this->dropQualifiedTables();
         (new SchemaTool($this->em))->createSchema($metadata);
 
@@ -112,7 +112,70 @@ final class Harness
     }
 
     /**
-     * `dropSchema()` leaves tables that live in a schema of their own —
+     * Empties the whole test database, not just this fixture's tables.
+     *
+     * `SchemaTool::dropSchema()` drops what the mapping declares and
+     * swallows every failure, which is a bad combination on a server: two
+     * fixtures both map a table called `authors`, and the one left behind
+     * by an earlier test class is still referenced by *its* `articles`.
+     * MySQL refuses the DROP, SchemaTool ignores the refusal, and the
+     * CREATE that follows fails with "table already exists" — in a test
+     * class that has nothing to do with either fixture.
+     *
+     * SQLite runs in memory and never saw it, so the suite was green
+     * locally and order-dependent everywhere else. The database here is
+     * the harness's own, so emptying it is both safe and the only thing
+     * that makes a test class independent of the ones before it.
+     */
+    private function dropEverything(): void
+    {
+        $connection = $this->em->getConnection();
+        $platform = $connection->getDatabasePlatform();
+
+        [$list, $before, $after] = match (Database::driver()) {
+            'pgsql' => [
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
+                null,
+                null,
+            ],
+            'sqlite' => [
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+                'PRAGMA foreign_keys = OFF',
+                'PRAGMA foreign_keys = ON',
+            ],
+            default => ['SHOW TABLES', 'SET FOREIGN_KEY_CHECKS = 0', 'SET FOREIGN_KEY_CHECKS = 1'],
+        };
+
+        $tables = $connection->fetchFirstColumn($list);
+
+        if ($tables === []) {
+            return;
+        }
+
+        if ($before !== null) {
+            $connection->executeStatement($before);
+        }
+
+        foreach ($tables as $table) {
+            if (! is_string($table)) {
+                continue;
+            }
+
+            // PostgreSQL has no FK switch, so the dependants go with it.
+            $connection->executeStatement(sprintf(
+                'DROP TABLE IF EXISTS %s%s',
+                $platform->quoteIdentifier($table),
+                Database::driver() === 'pgsql' ? ' CASCADE' : '',
+            ));
+        }
+
+        if ($after !== null) {
+            $connection->executeStatement($after);
+        }
+    }
+
+    /**
+     * `dropEverything()` leaves tables that live in a schema of their own —
      * observed on MySQL, where the second run of a fixture mapped to
      * `archive.entries` failed on "table already exists". Nothing in the
      * package drops schemas, so this is the harness catching up rather
