@@ -555,12 +555,16 @@ final class ProjectionGenerator
             ."     * through the other.\n"
             ."     *\n"
             ."     * @param  array<int, mixed>|mixed  \$ids\n"
+            ."     * @return %s<static>\n"
             ."     */\n"
             ."    public function newQueryForRestoration(\$ids)\n    {\n"
+            ."        /** @var %s<static> */\n"
             ."        return \$this->newQuery()->whereKey(\$ids);\n    }\n",
             $title,
             $builder,
             $condition,
+            $builder,
+            $builder,
         );
     }
 
@@ -990,8 +994,11 @@ final class ProjectionGenerator
                 'datetime', 'datetime_immutable', 'datetimetz', 'datetimetz_immutable',
                 'date', 'date_immutable',
                 'time', 'time_immutable' => $this->imports->reference(CarbonImmutable::class),
-                'simple_array' => 'array',
-                'json' => 'array',
+                // level max in a consuming project rejects a bare `array`,
+                // and the generated file is code they did not write and
+                // cannot fix
+                'simple_array' => 'list<string>',
+                'json' => 'array<array-key, mixed>',
                 default => 'string',
             };
 
