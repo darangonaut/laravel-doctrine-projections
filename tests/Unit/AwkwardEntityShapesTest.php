@@ -75,7 +75,10 @@ final class AwkwardEntityShapesTest extends TestCase
         self::assertStringContainsString('backing type', $projection->warnings[0]);
     }
 
-    /** A blob reads as a whole string here and as a stream on the entity. */
+    /**
+     * A blob's shape through the projection depends on the driver, so the
+     * warning names both rather than promising one.
+     */
     #[Test]
     public function a_blob_column_is_reported(): void
     {
@@ -83,6 +86,6 @@ final class AwkwardEntityShapesTest extends TestCase
 
         self::assertCount(1, $warnings);
         self::assertStringContainsString('thumbnail', $warnings[0]);
-        self::assertStringContainsString('read into memory', $warnings[0]);
+        self::assertStringContainsString('whatever the driver returns', $warnings[0]);
     }
 }

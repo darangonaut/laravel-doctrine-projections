@@ -80,23 +80,43 @@ final class NewShapesDifferentialTest extends TestCase
     }
 
     /**
-     * A blob is the one built-in type whose PHP shape the two sides
-     * genuinely disagree on: a stream on the entity, a string on the
-     * projection. The bytes match, which is what makes it a warning
-     * rather than a bug.
+     * A blob is the one built-in type whose PHP shape the projection does
+     * not pin down. The entity always gets a stream; the projection gets
+     * whatever the driver returns — a string on SQLite and MySQL, a
+     * stream on PostgreSQL.
+     *
+     * The bytes match either way, which is what makes it a warning rather
+     * than a bug. The first version of this test asserted `string` and
+     * was green locally and on MySQL and red on PostgreSQL, which is how
+     * the driver dependence turned up at all.
      */
     #[Test]
-    public function a_blob_is_a_string_here_and_a_stream_there(): void
+    public function a_blob_carries_the_same_bytes_whatever_shape_it_arrives_in(): void
     {
         $entity = $this->harness->em()->getRepository(Listing::class)->findAll()[0];
         $model = $this->harness->projection('Listing')::query()->first();
 
         self::assertNotNull($model);
-        self::assertIsResource($entity->thumbnail);
-        self::assertIsString($model->getAttribute('thumbnail'));
+        self::assertIsResource($entity->thumbnail, 'the entity side is a stream on every driver');
 
         rewind($entity->thumbnail);
 
-        self::assertSame(stream_get_contents($entity->thumbnail), $model->getAttribute('thumbnail'));
+        self::assertSame(
+            stream_get_contents($entity->thumbnail),
+            self::bytes($model->getAttribute('thumbnail')),
+        );
+    }
+
+    private static function bytes(mixed $value): string
+    {
+        if (is_resource($value)) {
+            rewind($value);
+
+            return (string) stream_get_contents($value);
+        }
+
+        self::assertIsString($value);
+
+        return $value;
     }
 }

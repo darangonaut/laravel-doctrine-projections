@@ -994,17 +994,18 @@ final class ProjectionGenerator
 
     /**
      * `blob` and `binary` are the two built-in types whose PHP shape the
-     * two sides genuinely disagree on: Doctrine hands back an open stream,
-     * Eloquent hands back the whole value as a string.
+     * projection does not pin down.
      *
-     * Measured on one row — entity `resource(stream)`, projection
-     * `string` — so it is not a difference in the bytes. It is a
-     * difference in when they arrive: `stream_get_contents($model->file)`
-     * is a TypeError, and a column holding something large is now a
-     * column read entirely into memory on every row of every query.
+     * Doctrine always hands back an open stream. What the projection
+     * hands back depends on the driver, which is the part worth saying
+     * out loud: measured, a string on SQLite and MySQL and a stream on
+     * PostgreSQL. So `stream_get_contents($model->file)` is correct on
+     * one deployment and a TypeError on another, and on the drivers that
+     * return a string a large column is read entirely into memory on
+     * every row of every query.
      *
-     * The docblock says `string`, so static analysis sees it. This says
-     * it to whoever runs the command.
+     * The generated docblock says `string`, which is right on two of the
+     * three. Rather than pick a side it cannot keep, this says so.
      *
      * @param  ClassMetadata<object>  $meta
      * @param  list<string>  $warnings
@@ -1016,9 +1017,9 @@ final class ProjectionGenerator
         }
 
         $warnings[] = sprintf(
-            'Column "%s" is a %s. The entity gets a stream from it; the projection gets a string, '
-            .'so the whole value is read into memory on every row. Select around it, or keep '
-            .'reading that column through the entity.',
+            'Column "%s" is a %s. The entity always gets a stream from it; the projection gets '
+            .'whatever the driver returns — a string on SQLite and MySQL, a stream on PostgreSQL. '
+            .'Handle both, select around the column, or keep reading it through the entity.',
             $meta->getColumnName($field),
             $meta->getTypeOfField($field),
         );
