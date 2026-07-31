@@ -474,6 +474,7 @@ final class ProjectionGenerator
             }
 
             $this->warnAboutCustomType($meta, $field, $warnings);
+            $this->warnAboutStreamedType($meta, $field, $warnings);
         }
 
         if ($casts !== []) {
@@ -911,6 +912,38 @@ final class ProjectionGenerator
             .'value; only the entity gets what convertToPHPValue() makes of it.',
             $meta->getColumnName($field),
             $type,
+        );
+    }
+
+    /**
+     * `blob` and `binary` are the two built-in types whose PHP shape the
+     * two sides genuinely disagree on: Doctrine hands back an open stream,
+     * Eloquent hands back the whole value as a string.
+     *
+     * Measured on one row — entity `resource(stream)`, projection
+     * `string` — so it is not a difference in the bytes. It is a
+     * difference in when they arrive: `stream_get_contents($model->file)`
+     * is a TypeError, and a column holding something large is now a
+     * column read entirely into memory on every row of every query.
+     *
+     * The docblock says `string`, so static analysis sees it. This says
+     * it to whoever runs the command.
+     *
+     * @param  ClassMetadata<object>  $meta
+     * @param  list<string>  $warnings
+     */
+    private function warnAboutStreamedType(ClassMetadata $meta, string $field, array &$warnings): void
+    {
+        if (! in_array($meta->getTypeOfField($field), [Types::BLOB, Types::BINARY], true)) {
+            return;
+        }
+
+        $warnings[] = sprintf(
+            'Column "%s" is a %s. The entity gets a stream from it; the projection gets a string, '
+            .'so the whole value is read into memory on every row. Select around it, or keep '
+            .'reading that column through the entity.',
+            $meta->getColumnName($field),
+            $meta->getTypeOfField($field),
         );
     }
 

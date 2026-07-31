@@ -262,6 +262,15 @@ final class Compare
      */
     private function normalise(mixed $value): mixed
     {
+        // A blob reaches the entity as an open stream and the projection
+        // as a string. That difference is real and the generator warns
+        // about it; what this compares is the bytes, which must match.
+        if (is_resource($value)) {
+            rewind($value);
+
+            return stream_get_contents($value);
+        }
+
         return match (true) {
             $value instanceof BackedEnum => $value->value,
             $value instanceof DateTimeInterface => $value->format('Y-m-d H:i:s'),
