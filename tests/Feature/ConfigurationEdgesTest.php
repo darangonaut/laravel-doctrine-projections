@@ -183,4 +183,60 @@ final class ConfigurationEdgesTest extends TestCase
 
         $this->command('doctrine:projections --check')->assertFailed();
     }
+
+    /** A relative `path` is resolved against the working directory. */
+    #[Test]
+    public function a_relative_path_works(): void
+    {
+        $previous = getcwd();
+        self::assertIsString($previous);
+
+        File::ensureDirectoryExists($this->output);
+        chdir($this->output);
+
+        config()->set('doctrine-projections.path', 'models/projections');
+
+        try {
+            $this->command('doctrine:projections')->assertSuccessful();
+
+            self::assertFileExists($this->output.'/models/projections/Account.php');
+        } finally {
+            chdir($previous);
+        }
+    }
+
+    /** `path` naming a file rather than a directory has to fail, not half-run. */
+    #[Test]
+    public function a_path_that_is_a_file_fails(): void
+    {
+        File::ensureDirectoryExists($this->output);
+
+        $file = $this->output.'/not-a-directory';
+        File::put($file, 'x');
+
+        config()->set('doctrine-projections.path', $file);
+
+        $this->command('doctrine:projections')->assertFailed();
+
+        self::assertSame('x', File::get($file), 'and does not overwrite it');
+    }
+
+    /**
+     * The package never builds an EntityManager; it uses whatever the
+     * application bound. With nothing bound, the failure should name the
+     * thing that is missing.
+     */
+    #[Test]
+    public function no_bound_entity_manager_says_which_binding_is_missing(): void
+    {
+        $this->app?->forgetInstance(EntityManagerInterface::class);
+        $this->app?->offsetUnset(EntityManagerInterface::class);
+
+        try {
+            $this->command('doctrine:projections')->run();
+            self::fail('expected the missing binding to surface');
+        } catch (\Throwable $e) {
+            self::assertStringContainsString('EntityManagerInterface', $e->getMessage());
+        }
+    }
 }

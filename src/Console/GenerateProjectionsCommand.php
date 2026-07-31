@@ -89,6 +89,18 @@ final class GenerateProjectionsCommand extends Command
         }
 
         if (! $this->option('dry')) {
+            // Otherwise this surfaces as a raw `mkdir(): File exists`
+            // with a stack trace through Laravel's error handler, which
+            // says nothing about which config value is wrong.
+            if (File::exists($path) && ! File::isDirectory($path)) {
+                $this->components->error(
+                    '`path` in config/doctrine-projections.php points at a file, not a directory: '
+                    .$path,
+                );
+
+                return self::FAILURE;
+            }
+
             File::ensureDirectoryExists($path);
 
             $foreign = self::handWrittenFilesIn($path);
