@@ -7,6 +7,7 @@ namespace Darangonaut\DoctrineProjections\Tests\Unit;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Darangonaut\DoctrineProjections\Tests\EntityManagerFactory;
+use Doctrine\ORM\Mapping\MappingException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -70,5 +71,51 @@ final class AdvancedMappingTest extends TestCase
 
         self::assertStringContainsString('@property string $headline', $code);
         self::assertStringNotContainsString('$title', $code, 'the superclass name must not survive');
+    }
+
+    /**
+     * Repository class, lifecycle callbacks, entity listeners, second-level
+     * cache, indexes and unique constraints all concern the write side or
+     * the schema — none of them changes what a row looks like when read.
+     *
+     * The check is that the two projections differ only in the names: any
+     * other difference means one of these features leaked into the output,
+     * and a projection that carries write-side machinery is a projection
+     * that lies about being read-only.
+     */
+    #[Test]
+    public function write_side_and_schema_features_leave_the_projection_alone(): void
+    {
+        $rendered = $this->generate('Passive');
+
+        $plain = $rendered['PlainThing']->code;
+        $decorated = $rendered['DecoratedThing']->code;
+
+        $normalised = str_replace(
+            ['DecoratedThing', 'decorated_things'],
+            ['PlainThing', 'plain_things'],
+            $decorated,
+        );
+
+        self::assertSame($plain, $normalised);
+
+        foreach (['ThingRepository', 'ThingListener', 'READ_ONLY', 'decorated_label_idx', 'prePersist'] as $leak) {
+            self::assertStringNotContainsString($leak, $decorated);
+        }
+    }
+
+    /**
+     * An embeddable cannot hold an association — Doctrine refuses the
+     * mapping itself, so the generator never sees one. Pinned as a canary:
+     * if a later Doctrine allows it, this test fails and the generator
+     * needs to decide what such a column becomes.
+     */
+    #[Test]
+    public function doctrine_refuses_an_embeddable_that_holds_an_association(): void
+    {
+        $this->expectException(MappingException::class);
+        $this->expectExceptionMessageMatches('/embeddable/i');
+
+        $this->generate('EmbeddedAssociation');
     }
 }
