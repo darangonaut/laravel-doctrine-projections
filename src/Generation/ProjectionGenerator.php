@@ -28,6 +28,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use ReflectionClass;
+use ReflectionEnum;
 use ReflectionProperty;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
@@ -475,6 +476,7 @@ final class ProjectionGenerator
 
             $this->warnAboutCustomType($meta, $field, $warnings);
             $this->warnAboutStreamedType($meta, $field, $warnings);
+            $this->warnAboutPureEnum($meta, $field, $warnings);
         }
 
         if ($casts !== []) {
@@ -695,9 +697,18 @@ final class ProjectionGenerator
             $out .= sprintf("\n    protected \$primaryKey = '%s';\n", $keyColumn);
         }
 
-        $intKey = in_array($meta->getTypeOfField($identifier), ['integer', 'smallint', 'bigint'], true);
+        $keyDoctrineType = $meta->getTypeOfField($identifier);
+        $intKey = in_array($keyDoctrineType, ['integer', 'smallint', 'bigint'], true);
 
-        if (! $intKey) {
+        // Eloquent knows two key types, and picking the wrong one is not
+        // cosmetic: `whereKey()` casts the value when the type is 'string',
+        // and `(string) false` is the empty string. A boolean key then
+        // made find(false) query `where enabled = ''` and answer null
+        // where the entity found the row. Booleans are stored as 0/1
+        // everywhere, so 'int' is both true and harmless.
+        $numericKey = $intKey || $keyDoctrineType === 'boolean';
+
+        if (! $numericKey) {
             $out .= "\n    protected \$keyType = 'string';\n";
         }
 
@@ -912,6 +923,37 @@ final class ProjectionGenerator
             .'value; only the entity gets what convertToPHPValue() makes of it.',
             $meta->getColumnName($field),
             $type,
+        );
+    }
+
+    /**
+     * A pure enum behind `enumType:` is a mapping the two sides read
+     * differently and Doctrine cannot write at all.
+     *
+     * Doctrine's enum accessor reads `->value`, which a pure enum does
+     * not have — measured, the insert died on a NOT NULL violation after
+     * a PHP warning. Laravel, meanwhile, casts a pure enum by *name*, so
+     * the projection happily reads whatever is in the column as
+     * `Colour::Red`. Two sides disagreeing about a column neither of them
+     * can round-trip is worth one line at generation.
+     *
+     * @param  ClassMetadata<object>  $meta
+     * @param  list<string>  $warnings
+     */
+    private function warnAboutPureEnum(ClassMetadata $meta, string $field, array &$warnings): void
+    {
+        $enum = $meta->getFieldMapping($field)->enumType ?? null;
+
+        if (! is_string($enum) || ! enum_exists($enum) || (new ReflectionEnum($enum))->isBacked()) {
+            return;
+        }
+
+        $warnings[] = sprintf(
+            'Column "%s" is mapped to the pure enum %s. Doctrine reads ->value from it, which a '
+            .'pure enum has no such thing as; Eloquent casts by case name instead. Give the enum '
+            .'a backing type.',
+            $meta->getColumnName($field),
+            class_basename($enum),
         );
     }
 
