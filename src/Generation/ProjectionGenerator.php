@@ -11,6 +11,8 @@ use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Exceptions\NamespaceCollision;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
+use Doctrine\DBAL\Exception as DbalException;
+use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\AssociationMapping;
@@ -914,16 +916,49 @@ final class ProjectionGenerator
             'is_string',
         ));
 
-        if (in_array($type, $this->builtInTypes, true)) {
+        if (! in_array($type, $this->builtInTypes, true)) {
+            $warnings[] = sprintf(
+                'Column "%s" uses the custom Doctrine type "%s". The projection reads the stored '
+                .'value; only the entity gets what convertToPHPValue() makes of it.',
+                $meta->getColumnName($field),
+                $type,
+            );
+
             return;
         }
 
-        $warnings[] = sprintf(
-            'Column "%s" uses the custom Doctrine type "%s". The projection reads the stored '
-            .'value; only the entity gets what convertToPHPValue() makes of it.',
-            $meta->getColumnName($field),
-            $type,
-        );
+        // A built-in *name* is not a built-in *type*: `Type::overrideType()`
+        // replaces the class behind one, and the name in the metadata is
+        // unchanged. The check above then said nothing, the cast for the
+        // original type was emitted, and the two sides quietly meant
+        // different things by the same column — measured with a
+        // `datetime_immutable` override that returns a fixed date.
+        //
+        // DBAL's own types all live in one namespace, which is what makes
+        // the replacement visible from here.
+        if (! str_starts_with($this->classBehind($type), 'Doctrine\\DBAL\\Types\\')) {
+            $warnings[] = sprintf(
+                'The Doctrine type "%s" has been replaced by %s, so column "%s" does not mean what '
+                .'its type name says. The projection still reads the stored value; only the entity '
+                .'gets what the replacement makes of it.',
+                $type,
+                class_basename($this->classBehind($type)),
+                $meta->getColumnName($field),
+            );
+        }
+    }
+
+    /** The class currently registered for a Doctrine type name. */
+    private function classBehind(string $type): string
+    {
+        try {
+            return Type::getType($type)::class;
+        } catch (DbalException) {
+            // Unregistered here means the metadata came from a mapping the
+            // running process cannot fully resolve. Not this method's
+            // problem, and not worth a warning of its own.
+            return 'Doctrine\\DBAL\\Types\\';
+        }
     }
 
     /**
