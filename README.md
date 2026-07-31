@@ -91,6 +91,32 @@ Configure where they land in `config/doctrine-projections.php`:
 'path'      => app_path('Models/Projections'),
 ```
 
+### Where in a deploy it belongs
+
+Generate **before** dumping the autoloader:
+
+```bash
+php artisan doctrine:projections
+composer dump-autoload --optimize --classmap-authoritative
+```
+
+`--classmap-authoritative` makes the autoloader answer only from its
+classmap and never look at a file again, so a projection written after
+that dump does not exist as far as the application is concerned. The
+command notices this and says so, but the ordering above avoids it
+entirely. Plain `--optimize` keeps the PSR-4 fallback and is unaffected.
+
+Neither `--dry` nor `--check` writes anything, and neither touches the
+application's metadata cache — running `--check` against a live server is
+safe.
+
+A regenerate replaces each file in one step and deletes only files whose
+entity is gone, so an application serving requests never sees a moment
+without its models. What it *does* keep is whatever it already loaded:
+under Octane, Swoole or any long-running worker, a class stays as it was
+when the worker first loaded it. Regenerating during a deploy therefore
+needs the usual worker restart to take effect — `php artisan octane:reload`.
+
 ### Choosing which entities to project
 
 ```php
