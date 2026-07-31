@@ -34,6 +34,10 @@ class Reading
     #[ORM\Column(name: 'recorded_at', type: 'datetimetz_immutable')]
     public DateTimeImmutable $recordedAt;
 
+    /** No zone at all — the naive wall-clock case. */
+    #[ORM\Column(name: 'observed_at', type: 'datetime_immutable')]
+    public DateTimeImmutable $observedAt;
+
     #[ORM\Column(type: 'boolean')]
     public bool $valid = false;
 
@@ -50,5 +54,6 @@ class Reading
         $this->takenOn = new DateTimeImmutable('2026-07-30');
         $this->takenAt = new DateTimeImmutable('14:30:00');
         $this->recordedAt = new DateTimeImmutable('2026-07-30 14:30:00');
+        $this->observedAt = new DateTimeImmutable('2026-07-30 14:30:00');
     }
 }
