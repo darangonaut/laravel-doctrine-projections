@@ -33,8 +33,8 @@ final class ChainedMappingDriversTest extends TestCase
     private function generate(): array
     {
         $chain = new MappingDriverChain;
-        $chain->addDriver(new AttributeDriver([__DIR__.'/../Fixtures/Chain/attributes']), self::ATTRIBUTES);
-        $chain->addDriver(new XmlDriver(__DIR__.'/../Fixtures/Chain/xml', '.dcm.xml'), self::XML);
+        $chain->addDriver(new AttributeDriver([__DIR__.'/../Fixtures/Chain/Attributes']), self::ATTRIBUTES);
+        $chain->addDriver(new XmlDriver(__DIR__.'/../Fixtures/Chain/Xml', '.dcm.xml'), self::XML);
 
         $config = new Configuration;
         $config->setMetadataDriverImpl($chain);
