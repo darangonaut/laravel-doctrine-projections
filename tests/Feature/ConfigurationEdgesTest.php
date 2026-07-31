@@ -239,4 +239,60 @@ final class ConfigurationEdgesTest extends TestCase
             self::assertStringContainsString('EntityManagerInterface', $e->getMessage());
         }
     }
+
+    /**
+     * A relation whose target was excluded is skipped with a warning, and
+     * `--check` has to agree with that — the same filter runs in both, so
+     * the excluded entity is neither generated nor reported as orphaned.
+     */
+    #[Test]
+    public function an_excluded_entity_is_consistent_between_generate_and_check(): void
+    {
+        config()->set('doctrine-projections.entities.except', ['*\\Profile']);
+
+        $this->command('doctrine:projections')
+            ->expectsOutputToContain('Skipped relation')
+            ->assertSuccessful();
+
+        self::assertFileDoesNotExist($this->output.'/Profile.php');
+        self::assertFileExists($this->output.'/Account.php');
+
+        $this->command('doctrine:projections --check')->assertSuccessful();
+    }
+
+    /** Un-excluding it makes `--check` fail until it is regenerated. */
+    #[Test]
+    public function un_excluding_an_entity_makes_check_fail(): void
+    {
+        config()->set('doctrine-projections.entities.except', ['*\\Profile']);
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        config()->set('doctrine-projections.entities.except', []);
+        $this->command('doctrine:projections --check')->assertFailed();
+    }
+
+    /**
+     * A single file in the output directory replaced by a symlink. The
+     * guard reads through it, so a symlink to a hand-written model is
+     * still a hand-written model.
+     */
+    #[Test]
+    public function a_symlinked_file_in_the_output_directory_is_read_through(): void
+    {
+        File::ensureDirectoryExists($this->output);
+
+        $real = $this->output.'-handwritten.php';
+        File::put($real, "<?php\n\nclass Invoice {}\n");
+
+        symlink($real, $this->output.'/Invoice.php');
+
+        try {
+            $this->command('doctrine:projections')->assertFailed();
+
+            self::assertSame("<?php\n\nclass Invoice {}\n", File::get($real));
+        } finally {
+            @unlink($this->output.'/Invoice.php');
+            @unlink($real);
+        }
+    }
 }
