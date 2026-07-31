@@ -4,6 +4,53 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] — 2026-07-31
+
+A fourth list of forty-five scenarios, aimed at the same Laravel side as
+the third — the area that had produced twelve findings. It produced one,
+and that one is in the test suite rather than the package. Nothing about
+how the package behaves changed; this is tests and documentation.
+
+### Fixed
+
+- **The test suite had no event dispatcher.** Capsule installs none, so
+  for three rounds not a single model event fired — including the four
+  this package registers as a layer of its write lock. That layer looked
+  exercised and was not. With a dispatcher in place: read events fire and
+  observers see `retrieved`, and write events never fire because `save()`
+  and `delete()` refuse before Eloquent gets as far as dispatching one.
+
+- **`ReadOnlyModel`'s docblock claimed three layers "each covering what
+  the others miss".** The events cover nothing today. It now says what is
+  actually true, and why the listeners stay anyway.
+
+### Documented
+
+Five things that cannot be fixed in code, each measured first:
+
+- `Auth::login($user, remember: true)` writes a token to the user's row
+  and is refused. Plain login and policies both work.
+- `Model::factory()` on a projection is a `BadMethodCallException`.
+- A projection's class name does not belong in a morph column — the
+  namespace is a config value and the file is build output. Use
+  `Relation::enforceMorphMap()`.
+- `RefreshDatabase` rolls back Laravel's connection; Doctrine on its own
+  connection is untouched, so its writes survive into the next test. One
+  connection for both — `SharedPdoDriver` — is the answer.
+- A projection and an entity model with the same short name resolve to
+  the same policy class.
+
+### Verified, unchanged
+
+Policy discovery, nested route binding, `withoutGlobalScope()`,
+`retrieved` and observers, `replicate()`, JSON column operators,
+`cursor()`, `withCount`/`has`/`doesntHave`/`with`, pagination totals, a
+custom collection, `$appends`, two subclasses of one projection at once,
+`$table` and `booted()` overridden in a subclass, `SoftDeletes` bolted on
+in a subclass (reads pass, all three write paths refuse), morph maps, a
+queued job carrying loaded relations, `forceFill`, `modelKeys()` and
+`withoutTimestamps()`.
+
 ## [0.9.0] — 2026-07-31
 
 A third list of fifty scenarios, aimed where the earlier two were not:
