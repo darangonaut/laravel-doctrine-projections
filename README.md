@@ -481,6 +481,37 @@ If a filter is enabled while generating, the command says so. Otherwise:
 apply the same condition at the call site, exclude those entities from
 generation, or accept that the projection sees every row.
 
+### `exists:` and `unique:` do not see the inheritance scope
+
+Laravel's database rules take a model only to read its table and
+connection off it; the query they build afterwards is a plain one against
+that table. Global scopes are a model feature, so a single-table
+inheritance projection does not narrow them:
+
+```php
+'payment_id' => 'exists:App\\Models\\Projections\\CardPayment,id',
+```
+
+accepts a *cash* payment's id — valid input as far as the request is
+concerned, and `CardPayment::find($id)` returning null one line later.
+Name the discriminator in the rule and it behaves:
+
+```php
+'payment_id' => 'exists:App\\Models\\Projections\\CardPayment,id,kind,card',
+```
+
+Only projections with an inheritance scope are affected; for every other
+one the table *is* the answer.
+
+### One EntityManager at a time
+
+The command asks the container for `EntityManagerInterface` and projects
+whatever that one maps. An application with two Doctrine connections
+gets projections for the bound one only — the other's entities are absent
+rather than wrong, and `--check` will not mention them either. Generating
+both means running the command twice with different bindings and
+different `path`/`namespace` values.
+
 ### Under `Model::shouldBeStrict()`
 
 Generated projections run fine under all three guards, and the write lock
