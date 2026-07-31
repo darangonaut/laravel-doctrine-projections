@@ -503,6 +503,41 @@ Name the discriminator in the rule and it behaves:
 Only projections with an inheritance scope are affected; for every other
 one the table *is* the answer.
 
+### What a projection cannot be
+
+It can be authenticated against — `Auth::attempt()` works, and so does a
+policy: Laravel's policy discovery walks the namespace upwards, so
+`App\\Policies\\AccountPolicy` is found for
+`App\\Models\\Projections\\Account`. Note that a projection and an
+entity model of the same short name resolve to the *same* policy.
+
+Two things it cannot be:
+
+- **The model behind "remember me".** `Auth::login($user, remember: true)`
+  writes a token to the user's row, and the write is refused. Plain login
+  is unaffected.
+- **A factory target.** `Account::factory()` is a
+  `BadMethodCallException` — projections have no `HasFactory`, and a
+  factory writes.
+
+**Do not store a projection's class name in a morph column.** The
+namespace is a config value and the file is build output, so the stored
+string is tied to a setting rather than to your code. Give it a name of
+its own:
+
+```php
+Relation::enforceMorphMap(['author' => \App\Models\Projections\Author::class]);
+```
+
+### Tests: put both sides on one connection
+
+`RefreshDatabase` and `DatabaseTransactions` open a transaction on
+Laravel's connection and roll it back. Doctrine on a connection of its
+own knows nothing about that, so whatever it wrote survives into the next
+test. The `SharedPdoDriver` arrangement above is one connection for both,
+which makes the rollback cover them together — worth doing in the test
+environment even if production keeps them apart.
+
 ### One EntityManager at a time
 
 The command asks the container for `EntityManagerInterface` and projects
