@@ -4,6 +4,21 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] — 2026-07-31
+
+No change for anyone installing the package — `tests/` is export-ignored,
+so the archive is identical to 0.8.0. Tagged so a release exists whose CI
+is green.
+
+### Fixed
+
+- A test fixture directory was named `xml` under a namespace called
+  `Xml`. macOS does not care and Linux does, so the suite was green on
+  the machine it was written on and failed four CI jobs on the next push.
+  A new test now compares every declared namespace in `src/` and `tests/`
+  against its path, case included — the same hazard the generator already
+  refuses entities over.
+
 ## [0.8.0] — 2026-07-31
 
 A second list of fifty scenarios, worked through end to end. Six fixes on
