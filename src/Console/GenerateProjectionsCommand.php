@@ -8,6 +8,7 @@ use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Generation\EntityFilter;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
+use Darangonaut\DoctrineProjections\Support\AutoloaderVisibility;
 use Darangonaut\DoctrineProjections\Support\Config;
 use Doctrine\ORM\EntityManagerInterface;
 use Illuminate\Console\Command;
@@ -124,6 +125,17 @@ final class GenerateProjectionsCommand extends Command
                 $namespace.'\\'.$projection->className,
                 $projection->tableName,
             );
+        }
+
+        if (! $this->option('dry')) {
+            $warning = AutoloaderVisibility::warningFor(array_values(array_map(
+                static fn (RenderedProjection $projection): string => $namespace.'\\'.$projection->className,
+                $projections,
+            )));
+
+            if ($warning !== null) {
+                $this->components->warn($warning);
+            }
         }
 
         $this->components->info(sprintf(
