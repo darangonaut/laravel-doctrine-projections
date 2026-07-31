@@ -57,6 +57,57 @@ trait ReadOnlyModel
     }
 
     /**
+     * The value a route URL is built from.
+     *
+     * It reads the key column, which a composite-key projection does not
+     * have — so `route('seats.show', $seat)` produced `/seats/` and a
+     * link to nowhere, with no error anywhere along the way. Refusing
+     * says which model and why.
+     */
+    public function getRouteKey(): mixed
+    {
+        if ((string) $this->getKeyName() === '') {
+            throw UnsupportedMapping::compositeKeyIdentity('getRouteKey', static::class);
+        }
+
+        return parent::getRouteKey();
+    }
+
+    /**
+     * The other direction: a URL segment back into a model.
+     *
+     * Without this it built `where "seats"."" = 'A'`, which SQLite
+     * answers with no rows — so a route bound to a composite-key
+     * projection was a permanent 404, by way of two PHP deprecations from
+     * inside Eloquent.
+     *
+     * @param  mixed  $value
+     * @param  string|null  $field
+     */
+    public function resolveRouteBinding($value, $field = null): ?Model
+    {
+        if ($field === null && (string) $this->getKeyName() === '') {
+            throw UnsupportedMapping::compositeKeyIdentity('resolveRouteBinding', static::class);
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
+
+    /**
+     * @param  string  $childType
+     * @param  mixed  $value
+     * @param  string|null  $field
+     */
+    public function resolveChildRouteBinding($childType, $value, $field): ?Model
+    {
+        if ($field === null && (string) $this->getKeyName() === '') {
+            throw UnsupportedMapping::compositeKeyIdentity('resolveChildRouteBinding', static::class);
+        }
+
+        return parent::resolveChildRouteBinding($childType, $value, $field);
+    }
+
+    /**
      * Refuses whether or not anything changed.
      *
      * The event and the builder between them already stopped every save

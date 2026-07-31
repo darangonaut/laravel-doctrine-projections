@@ -9,6 +9,7 @@ use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\LazyCollection;
 
 /**
  * Model events only guard instance-level writes (save, update, delete on a
@@ -192,6 +193,109 @@ class ReadOnlyBuilder extends Builder
         $this->guardAgainstCompositeKey('findMany');
 
         return parent::findMany($ids, $columns);
+    }
+
+    /**
+     * Everything that walks a table by its key.
+     *
+     * These take the key column when none is given, and on a
+     * composite-key projection that column is the empty string. Nothing
+     * failed: `chunkById()` over three rows called back once with one row
+     * and returned true. A silent two-thirds of the table, in the method
+     * people reach for precisely because the table is too big to trust
+     * themselves with.
+     *
+     * Passing a column explicitly still works — `chunkById(100, $fn,
+     * 'row_letter')` is a perfectly good way to walk one of these, as long
+     * as the column really is unique.
+     *
+     * @param  int  $count
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function chunkById($count, callable $callback, $column = null, $alias = null)
+    {
+        $this->guardAgainstKeylessWalk('chunkById', $column);
+
+        return parent::chunkById($count, $callback, $column, $alias);
+    }
+
+    /**
+     * @param  int  $count
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function chunkByIdDesc($count, callable $callback, $column = null, $alias = null)
+    {
+        $this->guardAgainstKeylessWalk('chunkByIdDesc', $column);
+
+        return parent::chunkByIdDesc($count, $callback, $column, $alias);
+    }
+
+    /**
+     * @param  int  $count
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return bool
+     */
+    public function eachById(callable $callback, $count = 1000, $column = null, $alias = null)
+    {
+        $this->guardAgainstKeylessWalk('eachById', $column);
+
+        return parent::eachById($callback, $count, $column, $alias);
+    }
+
+    /**
+     * @param  int  $chunkSize
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return LazyCollection<int, TModel>
+     */
+    public function lazyById($chunkSize = 1000, $column = null, $alias = null)
+    {
+        $this->guardAgainstKeylessWalk('lazyById', $column);
+
+        return parent::lazyById($chunkSize, $column, $alias);
+    }
+
+    /**
+     * @param  int  $chunkSize
+     * @param  string|null  $column
+     * @param  string|null  $alias
+     * @return LazyCollection<int, TModel>
+     */
+    public function lazyByIdDesc($chunkSize = 1000, $column = null, $alias = null)
+    {
+        $this->guardAgainstKeylessWalk('lazyByIdDesc', $column);
+
+        return parent::lazyByIdDesc($chunkSize, $column, $alias);
+    }
+
+    /**
+     * The fallback ordering behind `chunk()`, `cursorPaginate()` and
+     * `lazy()`: with no order of its own, Eloquent adds one on the key.
+     * Here that is `order by "seats".""`, which SQLite accepts and
+     * silently orders nothing by.
+     *
+     * An explicit `orderBy()` skips this entirely, which is the answer for
+     * a composite-key projection.
+     */
+    protected function enforceOrderBy(): void
+    {
+        if (empty($this->query->orders) && empty($this->query->unionOrders)) {
+            $this->guardAgainstCompositeKey('an unordered chunk, cursor or lazy read');
+        }
+
+        parent::enforceOrderBy();
+    }
+
+    private function guardAgainstKeylessWalk(string $operation, ?string $column): void
+    {
+        if ($column === null) {
+            $this->guardAgainstCompositeKey($operation);
+        }
     }
 
     /**
