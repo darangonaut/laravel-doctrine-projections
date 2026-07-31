@@ -12,14 +12,27 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Makes a generated projection refuse every write.
  *
- * Three layers are needed, because each covers what the others miss:
+ * Where each refusal happens:
  *
- *   model events        instance writes: save(), update(), delete(), create()
- *   ReadOnlyBuilder     bulk writes: query()->update(), insert(), upsert(), touch()
+ *   save() / delete()       every instance write, including the ones that
+ *                           reach them indirectly — update(), create(),
+ *                           push(), destroy(), a relation's save()
+ *   ReadOnlyBuilder         bulk writes: query()->update(), insert(),
+ *                           upsert(), touch()
  *   ReadOnlyBelongsToMany   pivot writes: attach(), detach(), sync()
+ *   model events            a backstop, and today only that
  *
- * Hydration from the database goes through setRawAttributes(), so reading
- * is untouched.
+ * The events are listed last because they no longer fire: `save()` and
+ * `delete()` throw before Eloquent gets as far as dispatching `saving`
+ * or `deleting`. That was measured, not assumed — for three rounds the
+ * test suite had no event dispatcher at all, so the layer looked
+ * exercised and was not. They stay as a backstop for a write path a
+ * later Laravel might add that reaches events without reaching either
+ * of the two above.
+ *
+ * Read events are untouched: `retrieved` fires and observers see it,
+ * which is the point — reading is what a projection is for. Hydration
+ * itself goes through setRawAttributes().
  *
  * The trait is not called `ReadOnly`: `use ReadOnly;` does not parse on
  * PHP 8.4, where `readonly` is a keyword.

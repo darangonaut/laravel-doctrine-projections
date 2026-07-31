@@ -13,8 +13,10 @@ use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\Driver\AttributeDriver;
 use Doctrine\ORM\Tools\SchemaTool;
+use Illuminate\Container\Container;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Events\Dispatcher;
 use RuntimeException;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
@@ -44,6 +46,14 @@ final class Harness
         $this->capsule = new Capsule;
         $this->capsule->addConnection(Database::laravelConfig());
         $this->capsule->setAsGlobal();
+
+        // Before bootEloquent(), which is where Capsule hands whatever it
+        // has to Eloquent — setting it afterwards leaves models without
+        // one. Capsule installs none by default, so for three rounds no
+        // model event fired at all: a whole layer of the write lock, and
+        // every read event an application might hook, went unexercised.
+        $this->capsule->setEventDispatcher(new Dispatcher(new Container));
+
         $this->capsule->bootEloquent();
 
         // A driver configured but unreachable would otherwise surface as a
