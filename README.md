@@ -87,9 +87,18 @@ files whose entity is gone.
 Configure where they land in `config/doctrine-projections.php`:
 
 ```php
-'namespace' => 'App\\Models\\Projections',
-'path'      => app_path('Models/Projections'),
+'namespace'  => 'App\\Models\\Projections',
+'path'       => app_path('Models/Projections'),
+'connection' => null,   // null = database.default
 ```
+
+`connection` matters as soon as the application has more than one. A
+generated model carries a table name and nothing else, so without it the
+model reads `database.default` whatever Doctrine is pointed at — and a
+projection on the wrong database returns rows belonging to something
+else, quietly. The command compares the two sides where it can and says
+so when they differ; it stays silent when it cannot tell, which includes
+the `SharedPdoDriver` setup below.
 
 ### Where in a deploy it belongs
 

@@ -34,6 +34,24 @@ return [
     |
     */
 
+    /*
+    |---------------------------------------------------------------------
+    | Which Laravel connection the models read
+    |---------------------------------------------------------------------
+    |
+    | Null means `database.default`, which is right whenever Doctrine and
+    | Laravel are on the same database. Name a connection when they are
+    | not: a projection carries a table name and nothing else, so without
+    | this it reads whichever database Laravel happens to default to — and
+    | returns rows belonging to something else entirely, quietly.
+    |
+    | The command compares the two sides where it can and says so when
+    | they differ.
+    |
+    */
+
+    'connection' => null,
+
     'entities' => [
         'only' => [],
         'except' => [],

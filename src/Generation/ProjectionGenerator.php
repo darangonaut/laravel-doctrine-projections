@@ -63,6 +63,7 @@ final class ProjectionGenerator
         private readonly EntityManagerInterface $em,
         private readonly string $namespace,
         private readonly EntityFilter $filter = new EntityFilter,
+        private readonly ?string $connection = null,
     ) {}
 
     /**
@@ -443,7 +444,18 @@ final class ProjectionGenerator
      */
     private function members(ClassMetadata $meta, array &$warnings): string
     {
-        $out = sprintf("    protected \$table = '%s';\n", $this->qualifiedTableName($meta));
+        $out = '';
+
+        // Without this the model goes to `config('database.default')`,
+        // whatever Doctrine is pointed at. In an application with more
+        // than one connection that is a projection reading a different
+        // database — measured: it returned a row belonging to another
+        // schema entirely, and nothing said so.
+        if ($this->connection !== null) {
+            $out .= sprintf("    protected \$connection = '%s';\n\n", $this->connection);
+        }
+
+        $out .= sprintf("    protected \$table = '%s';\n", $this->qualifiedTableName($meta));
         $out .= $this->keyMembers($meta, $warnings);
 
         // Doctrine manages timestamps itself.

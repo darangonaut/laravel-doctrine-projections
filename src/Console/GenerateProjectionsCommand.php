@@ -10,8 +10,10 @@ use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Darangonaut\DoctrineProjections\Support\AutoloaderVisibility;
 use Darangonaut\DoctrineProjections\Support\Config;
+use Darangonaut\DoctrineProjections\Support\ConnectionMatch;
 use Doctrine\ORM\EntityManagerInterface;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Throwable;
 
@@ -38,9 +40,10 @@ final class GenerateProjectionsCommand extends Command
     {
         $namespace = Config::string('doctrine-projections.namespace');
         $path = Config::string('doctrine-projections.path');
+        $connection = self::connection();
 
         try {
-            $projections = (new ProjectionGenerator($em, $namespace, self::filter()))->generate();
+            $projections = (new ProjectionGenerator($em, $namespace, self::filter(), $connection))->generate();
         } catch (DuplicateProjectionName $e) {
             $this->components->error($e->getMessage());
 
@@ -57,6 +60,12 @@ final class GenerateProjectionsCommand extends Command
             foreach ($projection->warnings as $warning) {
                 $this->components->warn($warning);
             }
+        }
+
+        $mismatch = ConnectionMatch::warningFor($em->getConnection(), DB::connection($connection));
+
+        if ($mismatch !== null) {
+            $this->components->warn($mismatch);
         }
 
         if ($this->option('check')) {
@@ -169,6 +178,14 @@ final class GenerateProjectionsCommand extends Command
         ));
 
         return self::SUCCESS;
+    }
+
+    /** The Laravel connection the models will be bound to, if configured. */
+    private static function connection(): ?string
+    {
+        $connection = config('doctrine-projections.connection');
+
+        return is_string($connection) && $connection !== '' ? $connection : null;
     }
 
     private static function filter(): EntityFilter
