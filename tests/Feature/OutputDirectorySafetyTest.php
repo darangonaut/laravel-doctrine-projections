@@ -251,7 +251,7 @@ final class OutputDirectorySafetyTest extends TestCase
 
         // A directory where the temp file wants to go: File::put cannot
         // write it, so the run fails on the first projection.
-        File::ensureDirectoryExists($this->output.'/Account.php.tmp');
+        File::ensureDirectoryExists(sprintf('%s/Account.php.%d.tmp', $this->output, getmypid()));
 
         try {
             $this->command('doctrine:projections')->assertFailed();
@@ -259,7 +259,7 @@ final class OutputDirectorySafetyTest extends TestCase
             self::assertSame($before, File::get($this->output.'/Account.php'), 'the old model must survive');
             self::assertFileExists($this->output.'/Gone.php', 'nothing was deleted before the failure');
         } finally {
-            File::deleteDirectory($this->output.'/Account.php.tmp');
+            File::deleteDirectory(sprintf('%s/Account.php.%d.tmp', $this->output, getmypid()));
         }
     }
 

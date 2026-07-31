@@ -108,7 +108,13 @@ final class GenerateProjectionsCommand extends Command
                 // "Class not found" until the run finished. A rename
                 // replaces the file in one step, so a reader sees either
                 // the old contents or the new ones.
-                $temp = $file.'.tmp';
+                // Per-process, because two runs at once are an ordinary
+                // accident: a deploy racing a CI job, or someone hitting
+                // the command twice. Sharing one temp name would let the
+                // two interleave inside it and rename the mixture into
+                // place. Separate names make the worst case two identical
+                // renames.
+                $temp = sprintf('%s.%d.tmp', $file, getmypid());
 
                 // A failed write reports itself two different ways: as a
                 // raw ErrorException under Laravel's error handler, and as
