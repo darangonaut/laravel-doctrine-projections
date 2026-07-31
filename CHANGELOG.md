@@ -4,6 +4,95 @@ All notable changes to this package are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-07-31
+
+A third list of fifty scenarios, aimed where the earlier two were not:
+the places a projection meets the rest of Laravel — queues, caches, route
+binding, validation — plus concurrency and the Doctrine column shapes
+that had never been put on a row.
+
+Twelve findings on fifty scenarios, up from six. That is not noise; it is
+where the round went. The mapping and query surfaces are well covered by
+now, and this side had never had the same treatment.
+
+**A minor, not a patch** — one class of query returns different rows, and
+a few things that used to run now refuse. Each is in
+[UPGRADING.md](UPGRADING.md).
+
+### Fixed
+
+- **A projection could read a different database than its entity.** The
+  generated model carries a table name and nothing else, so it went to
+  `database.default` wherever Doctrine was pointed. Measured with two
+  SQLite files: the projection returned the row from the wrong one,
+  without a word. There is now a `connection` config option, and the
+  command compares the two sides where it can.
+
+- **`toJson()` threw on any projection with a `time` or `simple_array`
+  column.** Eloquent flushes its cached cast objects back through each
+  cast's `set()` inside `getAttributes()`, which `toJson()`, `refresh()`,
+  `getDirty()` and serializing a model for a queue or cache all reach.
+  Both casts this package ships refused there, so a read raised
+  `ReadOnlyProjection`. They convert now; the write lock has not moved.
+
+- **`chunkById()` on a composite-key projection walked part of the
+  table.** Three rows in, one callback with one row, `true` returned —
+  in the method people reach for precisely because the table is too big
+  to trust themselves with. It refuses now, along with `chunkByIdDesc`,
+  `eachById`, `lazyById`, `lazyByIdDesc` and an unordered
+  `chunk`/`cursorPaginate`/`lazy`. Naming a column still works.
+
+- **`getRouteKey()` returned null on a composite-key projection**, so
+  `route('seats.show', $seat)` produced `/seats/`. Route binding the
+  other way was a permanent 404 by way of two PHP deprecations. Both
+  refuse now; binding on a named field still works.
+
+- **A boolean primary key lost half its table.** `whereKey()` casts when
+  the key type is 'string' and `(string) false` is the empty string, so
+  `find(false)` queried `where enabled = ''`. `find(true)` worked, which
+  is what made it worth finding.
+
+- **A `namespace` with a leading or trailing backslash produced a parse
+  error in every generated file** — after a run that reported success and
+  wrote all of them. `'\App\Models\Projections'` is how the same name
+  is written nearly everywhere else in PHP. It is normalised now, and a
+  value that cannot be a namespace is refused before anything is written.
+
+- **`--check` was permanently red after a CRLF checkout.** `core.autocrlf`
+  turns the generated `\n` into `\r\n`, the byte comparison reported
+  every projection as out of date, and regenerating did not help. Only
+  the comparison is normalised; what gets written is still `\n`.
+
+- Two clearer failures: `path` pointing at a file no longer surfaces as a
+  raw `mkdir(): File exists`, and "nothing was generated" now says
+  whether an `entities.only`/`except` pattern is the reason.
+
+### Added
+
+- **`connection`** in `config/doctrine-projections.php`. Null keeps
+  today's behaviour.
+
+- **Three new warnings**, each for a column the two sides read
+  differently: a built-in Doctrine type replaced through
+  `Type::overrideType()`, a `blob`/`binary` column (a stream on the
+  entity, and on the projection a string or a stream depending on the
+  driver), and a pure enum behind `enumType:`.
+
+- README on `exists:`/`unique:` not seeing the inheritance scope, and on
+  the command projecting one EntityManager.
+
+### Verified, unchanged
+
+Queues and caches round-trip a projection and it comes back read-only and
+still scoped; restoring one as a sibling subclass fails rather than
+succeeding quietly. Two generates at once leave a complete set of files,
+and a reader running flat out against a directory being rewritten never
+saw a partial or missing file — 5050 reads, none of them torn. Also:
+backed enums of both kinds, `ascii_string`, `smallint`, `float`,
+embeddable prefixes, `orphanRemoval`, `fetch: EAGER`, a 63-character
+table name, columns with diacritics, an entity in the global namespace,
+200 entities in 0.07s, and `open_basedir`.
+
 ## [0.8.1] — 2026-07-31
 
 No change for anyone installing the package — `tests/` is export-ignored,

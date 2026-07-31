@@ -12,6 +12,39 @@ php artisan doctrine:projections
 The generated directory is build output. If you commit it, commit the
 result; if you generate on deploy, nothing to do.
 
+## To 0.9 from 0.8
+
+**Check whether your projections read the database you think they do.**
+A generated model goes to `database.default` unless told otherwise. If
+Doctrine is on a different connection, set `connection` in
+`config/doctrine-projections.php` to the Laravel connection that holds
+those tables and regenerate — the models then carry `$connection`. The
+command now says so when it can tell the two apart; it stays quiet on
+setups it cannot read, including `SharedPdoDriver`.
+
+**A composite-key projection now refuses more.** `chunkById()`,
+`chunkByIdDesc()`, `eachById()`, `lazyById()`, `lazyByIdDesc()`,
+`getRouteKey()` and `resolveRouteBinding()` throw `UnsupportedMapping`
+instead of answering, and so does an unordered `chunk()`,
+`cursorPaginate()` or `lazy()`. They were not working before — chunking
+walked part of the table and returned true, and route binding was a
+silent 404. Where you were relying on them, name the column
+(`chunkById(100, $fn, 'seat_number')`) or the field
+(`resolveRouteBinding($value, 'row_letter')`), or add an explicit
+`orderBy()`.
+
+**A projection keyed by a boolean now finds both its rows.** If you had
+worked around `find(false)` returning null, the workaround can go.
+
+**`$namespace` is normalised.** A leading or trailing backslash in
+`config/doctrine-projections.php` used to generate a parse error in every
+file; it is now trimmed. A value that cannot be a namespace at all fails
+the command before anything is written, where it used to write
+everything and exit 0.
+
+**Regenerate.** The generated files change if you set `connection`, and
+`--check` will ask for it anyway.
+
 ## To 0.8 from 0.7
 
 **An abstract class under a single-table root with no concrete subclasses
