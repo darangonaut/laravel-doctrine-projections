@@ -85,21 +85,21 @@ final class GenerateProjectionsCommand extends Command
                 return self::FAILURE;
             }
 
-            foreach (self::phpFilesIn($path) as $stale) {
-                // Also a bool rather than a throw. A file that survives
-                // deletion is one `--check` will later report as orphaned,
-                // with nothing to explain why it is still there.
-                if (! File::delete($stale)) {
-                    $this->components->error('Could not delete '.$stale.'. Is the directory writable?');
-
-                    return self::FAILURE;
-                }
-            }
         }
 
         foreach ($projections as $projection) {
             if (! $this->option('dry')) {
                 $file = $path.'/'.$projection->className.'.php';
+
+                // Written beside the target and renamed over it, because a
+                // regenerate can land while the application is serving.
+                // Deleting the directory first — which is what this used
+                // to do — left a window in which every projection was
+                // missing: any request that had not yet autoloaded one got
+                // "Class not found" until the run finished. A rename
+                // replaces the file in one step, so a reader sees either
+                // the old contents or the new ones.
+                $temp = $file.'.tmp';
 
                 // A failed write reports itself two different ways: as a
                 // raw ErrorException under Laravel's error handler, and as
@@ -107,14 +107,16 @@ final class GenerateProjectionsCommand extends Command
                 // run that wrote nothing could still exit 0 — a green
                 // deploy over an application left without models.
                 try {
-                    $written = File::put($file, $projection->code);
+                    $written = File::put($temp, $projection->code);
                 } catch (Throwable $e) {
                     $this->components->error(sprintf('Could not write %s: %s', $file, $e->getMessage()));
 
                     return self::FAILURE;
                 }
 
-                if ($written === false) {
+                if ($written === false || ! @rename($temp, $file)) {
+                    @unlink($temp);
+
                     $this->components->error('Could not write '.$file.'. Is the directory writable?');
 
                     return self::FAILURE;
@@ -125,6 +127,28 @@ final class GenerateProjectionsCommand extends Command
                 $namespace.'\\'.$projection->className,
                 $projection->tableName,
             );
+        }
+
+        if (! $this->option('dry')) {
+            $current = array_map(
+                static fn (RenderedProjection $projection): string => $projection->className.'.php',
+                $projections,
+            );
+
+            foreach (self::phpFilesIn($path) as $existing) {
+                if (in_array(basename($existing), $current, true)) {
+                    continue;
+                }
+
+                // Also a bool rather than a throw. A file that survives
+                // deletion is one `--check` will later report as orphaned,
+                // with nothing to explain why it is still there.
+                if (! File::delete($existing)) {
+                    $this->components->error('Could not delete '.$existing.'. Is the directory writable?');
+
+                    return self::FAILURE;
+                }
+            }
         }
 
         if (! $this->option('dry')) {

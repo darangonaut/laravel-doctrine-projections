@@ -222,4 +222,58 @@ final class OutputDirectorySafetyTest extends TestCase
         self::assertFileDoesNotExist($bracketed.'/Gone.php');
         self::assertFileExists($bracketed.'/Account.php');
     }
+
+    /**
+     * A regenerate can land while the application is serving.
+     *
+     * The directory used to be emptied before anything was written, so
+     * there was a window in which every projection was missing — any
+     * request that had not yet autoloaded one got "Class not found" until
+     * the run finished. Files are now written first, each renamed over its
+     * target in one step, and only genuinely orphaned ones are deleted.
+     *
+     * The observable half of that: a run which fails partway must leave
+     * the previous projections where they were, rather than having already
+     * deleted them.
+     */
+    #[Test]
+    public function a_failed_run_leaves_the_previous_projections_in_place(): void
+    {
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        $before = File::get($this->output.'/Account.php');
+
+        // stale too, so the cleanup path is in play as well
+        File::put(
+            $this->output.'/Gone.php',
+            "<?php\n\n/**\n * GENERATED — do not edit.\n */\nclass Gone {}\n",
+        );
+
+        // A directory where the temp file wants to go: File::put cannot
+        // write it, so the run fails on the first projection.
+        File::ensureDirectoryExists($this->output.'/Account.php.tmp');
+
+        try {
+            $this->command('doctrine:projections')->assertFailed();
+
+            self::assertSame($before, File::get($this->output.'/Account.php'), 'the old model must survive');
+            self::assertFileExists($this->output.'/Gone.php', 'nothing was deleted before the failure');
+        } finally {
+            File::deleteDirectory($this->output.'/Account.php.tmp');
+        }
+    }
+
+    /** A successful run leaves no temp files behind. */
+    #[Test]
+    public function no_temp_files_are_left_behind(): void
+    {
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        $leftovers = array_filter(
+            scandir($this->output) ?: [],
+            static fn (string $name): bool => str_ends_with($name, '.tmp'),
+        );
+
+        self::assertSame([], array_values($leftovers));
+    }
 }
