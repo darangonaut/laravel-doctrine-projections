@@ -16,4 +16,8 @@ abstract class Base
 
     #[ORM\Column(name: 'title', type: 'string', length: 100)]
     public string $title = '';
+
+    #[ORM\ManyToOne(targetEntity: Editor::class)]
+    #[ORM\JoinColumn(name: 'editor_id', referencedColumnName: 'id')]
+    public ?Editor $editor = null;
 }

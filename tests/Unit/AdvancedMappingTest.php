@@ -118,4 +118,20 @@ final class AdvancedMappingTest extends TestCase
 
         $this->generate('EmbeddedAssociation');
     }
+
+    /**
+     * The association twin of the attribute override: the superclass says
+     * the join column is `editor_id`, the entity says it is
+     * `assigned_editor_id`. Getting this wrong means a belongsTo() that
+     * queries a column the table does not have.
+     */
+    #[Test]
+    public function an_association_override_renames_the_inherited_join_column(): void
+    {
+        $code = $this->generate('Overrides')['Article']->code;
+
+        self::assertStringContainsString('@property int|null $assigned_editor_id', $code);
+        self::assertStringContainsString("belongsTo(Editor::class, 'assigned_editor_id')", $code);
+        self::assertStringNotContainsString('editor_id\'', str_replace('assigned_editor_id', 'x', $code));
+    }
 }
