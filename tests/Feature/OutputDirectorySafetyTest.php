@@ -169,4 +169,57 @@ final class OutputDirectorySafetyTest extends TestCase
 
         self::assertFileExists($this->output.'/Invoice.php');
     }
+
+    /**
+     * A path holding glob syntax — `~/work [old]/app/Models/Projections`
+     * is an ordinary enough thing to check a repository out into.
+     *
+     * `glob()` reads `[old]` as a character class over the whole path and
+     * matches nothing, so every listing of the directory came back empty:
+     * the guard above stopped protecting hand-written models, stale files
+     * stopped being deleted, and `--check` stopped reporting orphans. All
+     * three silently, over a directory name nobody involved chose.
+     */
+    #[Test]
+    public function a_path_containing_glob_syntax_is_still_read(): void
+    {
+        $bracketed = $this->output.'/work [old]/Projections';
+
+        File::ensureDirectoryExists($bracketed);
+        File::put($bracketed.'/Invoice.php', "<?php\n\nclass Invoice {}\n");
+
+        config()->set('doctrine-projections.path', $bracketed);
+
+        $this->command('doctrine:projections')->assertFailed();
+
+        self::assertSame(
+            "<?php\n\nclass Invoice {}\n",
+            File::get($bracketed.'/Invoice.php'),
+            'the hand-written file must survive a directory whose name looks like a pattern',
+        );
+
+        self::assertFileDoesNotExist($bracketed.'/Account.php');
+    }
+
+    /** The other half: stale cleanup has to keep working there too. */
+    #[Test]
+    public function stale_files_are_removed_from_a_path_containing_glob_syntax(): void
+    {
+        $bracketed = $this->output.'/work [old]/Projections';
+
+        config()->set('doctrine-projections.path', $bracketed);
+
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        File::put(
+            $bracketed.'/Gone.php',
+            "<?php\n\n/**\n * GENERATED — do not edit.\n */\nclass Gone {}\n",
+        );
+
+        $this->command('doctrine:projections --check')->assertFailed();
+        $this->command('doctrine:projections')->assertSuccessful();
+
+        self::assertFileDoesNotExist($bracketed.'/Gone.php');
+        self::assertFileExists($bracketed.'/Account.php');
+    }
 }

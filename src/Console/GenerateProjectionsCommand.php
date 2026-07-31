@@ -153,10 +153,36 @@ final class GenerateProjectionsCommand extends Command
             : [];
     }
 
-    /** @return list<string> */
+    /**
+     * Listed rather than globbed.
+     *
+     * `glob()` treats `[`, `]`, `*` and `?` in the *whole* path as pattern
+     * syntax, so a project checked out into `~/work [old]/app` matches
+     * nothing and comes back empty. Everything downstream reads that as
+     * "the directory holds no PHP files": the guard below stops protecting
+     * hand-written models, stale projections stop being deleted, and
+     * `--check` stops reporting orphans — all three quietly, and because
+     * of a directory name nobody involved chose.
+     *
+     * @return list<string>
+     */
     private static function phpFilesIn(string $dir): array
     {
-        return array_values(array_filter(File::glob($dir.'/*.php'), is_string(...)));
+        if (! File::isDirectory($dir)) {
+            return [];
+        }
+
+        $files = [];
+
+        foreach (File::files($dir) as $file) {
+            if ($file->getExtension() === 'php') {
+                $files[] = $file->getPathname();
+            }
+        }
+
+        sort($files);
+
+        return $files;
     }
 
     /**
