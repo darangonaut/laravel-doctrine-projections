@@ -87,7 +87,7 @@ files whose entity is gone.
 Configure where they land in `config/doctrine-projections.php`:
 
 ```php
-'namespace'  => 'App\\Models\\Projections',
+'namespace'  => 'App\\Models\\Projections',   // no leading or trailing backslash
 'path'       => app_path('Models/Projections'),
 'connection' => null,   // null = database.default
 ```

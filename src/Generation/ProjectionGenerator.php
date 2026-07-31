@@ -11,6 +11,7 @@ use Darangonaut\DoctrineProjections\Eloquent\ReadOnlyModel;
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
 use Darangonaut\DoctrineProjections\Exceptions\NamespaceCollision;
 use Darangonaut\DoctrineProjections\Exceptions\UnsupportedMapping;
+use Darangonaut\DoctrineProjections\Support\ProjectionNamespace;
 use Doctrine\DBAL\Exception as DbalException;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
@@ -62,12 +63,17 @@ final class ProjectionGenerator
     /** @var list<string>|null the type names DBAL ships */
     private ?array $builtInTypes = null;
 
+    /** Normalised on the way in — see ProjectionNamespace. */
+    private readonly string $namespace;
+
     public function __construct(
         private readonly EntityManagerInterface $em,
-        private readonly string $namespace,
+        string $namespace,
         private readonly EntityFilter $filter = new EntityFilter,
         private readonly ?string $connection = null,
-    ) {}
+    ) {
+        $this->namespace = ProjectionNamespace::normalise($namespace);
+    }
 
     /**
      * @return array<string, RenderedProjection> keyed by class basename

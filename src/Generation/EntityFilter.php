@@ -30,6 +30,19 @@ final class EntityFilter
         return new self;
     }
 
+    /**
+     * Whether any pattern is configured at all.
+     *
+     * "Nothing was generated" has two very different causes — a mapping
+     * with no entities, and a pattern that matched none of them — and one
+     * message for both used to send people to check a mapping that was
+     * fine.
+     */
+    public function isNarrowing(): bool
+    {
+        return $this->only !== [] || $this->except !== [];
+    }
+
     public function accepts(string $entityClass): bool
     {
         if ($this->only !== [] && ! $this->matchesAny($entityClass, $this->only)) {

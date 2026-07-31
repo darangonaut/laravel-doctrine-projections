@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Darangonaut\DoctrineProjections\Console;
 
 use Darangonaut\DoctrineProjections\Exceptions\DuplicateProjectionName;
+use Darangonaut\DoctrineProjections\Exceptions\InvalidNamespace;
 use Darangonaut\DoctrineProjections\Generation\EntityFilter;
 use Darangonaut\DoctrineProjections\Generation\ProjectionGenerator;
 use Darangonaut\DoctrineProjections\Generation\RenderedProjection;
 use Darangonaut\DoctrineProjections\Support\AutoloaderVisibility;
 use Darangonaut\DoctrineProjections\Support\Config;
 use Darangonaut\DoctrineProjections\Support\ConnectionMatch;
+use Darangonaut\DoctrineProjections\Support\ProjectionNamespace;
 use Doctrine\ORM\EntityManagerInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +40,14 @@ final class GenerateProjectionsCommand extends Command
 
     public function handle(EntityManagerInterface $em): int
     {
-        $namespace = Config::string('doctrine-projections.namespace');
+        try {
+            $namespace = ProjectionNamespace::normalise(Config::string('doctrine-projections.namespace'));
+        } catch (InvalidNamespace $e) {
+            $this->components->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $path = Config::string('doctrine-projections.path');
         $connection = self::connection();
 
@@ -51,7 +60,14 @@ final class GenerateProjectionsCommand extends Command
         }
 
         if ($projections === []) {
-            $this->components->error('No entities found. Is the EntityManager mapping anything?');
+            // Two very different causes, and the same message for both
+            // used to send people to check their mapping when the mapping
+            // was fine and their `only` pattern matched nothing.
+            $this->components->error(self::filter()->isNarrowing()
+                ? 'No entities matched `entities.only` / `entities.except` in '
+                    .'config/doctrine-projections.php. The patterns are matched against the fully '
+                    .'qualified class name with fnmatch(), so they need the namespace too.'
+                : 'No entities found. Is the EntityManager mapping anything?');
 
             return self::FAILURE;
         }
@@ -93,7 +109,6 @@ final class GenerateProjectionsCommand extends Command
 
                 return self::FAILURE;
             }
-
         }
 
         foreach ($projections as $projection) {
@@ -270,6 +285,23 @@ final class GenerateProjectionsCommand extends Command
     }
 
     /**
+     * The generator emits `\n`, and a checkout can turn that into
+     * `\r\n` on the way to disk — `core.autocrlf=true` on Windows does
+     * exactly that to a committed generated file.
+     *
+     * A byte comparison then reported every projection as out of date,
+     * on every run, and regenerating did not help: the next checkout put
+     * the carriage returns back. A permanently red `--check` with no way
+     * to make it green.
+     *
+     * Only the comparison is normalised. What gets written is still `\n`.
+     */
+    private static function normaliseNewlines(string $code): string
+    {
+        return str_replace("\r\n", "\n", $code);
+    }
+
+    /**
      * CI mode: assert the committed files already match the mapping.
      *
      * The failure this catches is a deploy where someone changed an entity
@@ -291,7 +323,7 @@ final class GenerateProjectionsCommand extends Command
                 continue;
             }
 
-            if (File::get($file) !== $projection->code) {
+            if (self::normaliseNewlines(File::get($file)) !== $projection->code) {
                 $stale[] = $projection->className.' — out of date';
             }
         }
