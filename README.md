@@ -240,7 +240,8 @@ Three layers, because each covers what the others miss:
 
 | Layer | Covers |
 |---|---|
-| model events | `save()`, `update()`, `delete()`, `create()`, `firstOrCreate()` |
+| model events | `update()`, `create()`, `firstOrCreate()` |
+| the trait itself | `save()`, `delete()` — refused whether or not anything is dirty |
 | `ReadOnlyBuilder` | `query()->update()`, `insert()`, `upsert()`, `increment()`, `truncate()`, `touch()` |
 | `ReadOnlyBelongsToMany` | `attach()`, `detach()`, `sync()`, `toggle()` |
 

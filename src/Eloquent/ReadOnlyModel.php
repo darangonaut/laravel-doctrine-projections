@@ -57,6 +57,22 @@ trait ReadOnlyModel
     }
 
     /**
+     * Refuses whether or not anything changed.
+     *
+     * The event and the builder between them already stopped every save
+     * that would have written — but only those. `save()` on a model whose
+     * attributes are untouched issues no UPDATE at all, so it returned
+     * true and taught the caller that saving a projection works. It does
+     * not; it was a no-op. The promise is about the attempt.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public function save(array $options = []): never
+    {
+        throw ReadOnlyProjection::attemptedTo('save', static::class);
+    }
+
+    /**
      * The `deleting` event above covers this on an ordinary projection,
      * but not on one with a composite key: Laravel's delete() throws
      * `LogicException: No primary key defined on model` *before* it fires
