@@ -67,6 +67,13 @@ final class QuerySurfaceTest extends TestCase
         return $this->harness->projection('Post');
     }
 
+    private function asInt(mixed $value): int
+    {
+        self::assertIsNumeric($value);
+
+        return (int) $value;
+    }
+
     #[Test]
     public function select_with_an_alias_and_a_raw_expression(): void
     {
@@ -78,7 +85,7 @@ final class QuerySurfaceTest extends TestCase
 
         self::assertNotNull($row);
         self::assertSame('Prvý', $row->getAttribute('heading'));
-        self::assertSame(20, (int) $row->getAttribute('doubled'));
+        self::assertSame(20, $this->asInt($row->getAttribute('doubled')));
     }
 
     #[Test]
@@ -120,7 +127,12 @@ final class QuerySurfaceTest extends TestCase
             self::assertInstanceOf(Model::class, $post);
             self::assertTrue($post->relationLoaded('comments'), 'the third level has to be loaded, not lazy');
 
-            foreach ($post->getAttribute('comments') as $comment) {
+            $comments = $post->getAttribute('comments');
+
+            self::assertIsIterable($comments);
+
+            foreach ($comments as $comment) {
+                self::assertInstanceOf(Model::class, $comment);
                 $bodies[] = $comment->getAttribute('body');
             }
         }
@@ -154,8 +166,8 @@ final class QuerySurfaceTest extends TestCase
             ->first();
 
         self::assertNotNull($author);
-        self::assertSame(30, (int) $author->getAttribute('posts_max_views'));
-        self::assertSame(20, (int) $author->getAttribute('posts_avg_views'));
+        self::assertSame(30, $this->asInt($author->getAttribute('posts_max_views')));
+        self::assertSame(20, $this->asInt($author->getAttribute('posts_avg_views')));
         self::assertTrue((bool) $author->getAttribute('posts_exists'));
     }
 
