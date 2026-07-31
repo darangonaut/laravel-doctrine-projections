@@ -526,20 +526,27 @@ final class ProjectionGenerator
 
         $values = $this->discriminatorValuesFor($meta);
 
-        if ($values === []) {
-            return '';
-        }
-
         $builder = $this->imports->reference(Builder::class);
 
         // One value is the common case and reads better as where().
-        $condition = count($values) === 1
-            ? sprintf("\$query->where('%s', '%s');", $column, $values[0])
-            : sprintf("\$query->whereIn('%s', ['%s']);", $column, implode("', '", $values));
+        //
+        // No values at all means an abstract class that nothing concrete
+        // extends. No row can carry a discriminator that is not in the
+        // map, so it owns none — but returning no scope let it own
+        // *every* row instead: Doctrine answered 0, the projection
+        // answered all of them. The matching condition is Doctrine's own;
+        // it emits `WHERE 1=0` for exactly this case.
+        $condition = match (count($values)) {
+            0 => "\$query->whereRaw('1 = 0');",
+            1 => sprintf("\$query->where('%s', '%s');", $column, $values[0]),
+            default => sprintf("\$query->whereIn('%s', ['%s']);", $column, implode("', '", $values)),
+        };
 
-        $title = count($values) === 1
-            ? 'this class owns only its own rows'
-            : 'this class and everything below it';
+        $title = match (count($values)) {
+            0 => 'abstract with nothing below it, so no row is ever one of these',
+            1 => 'this class owns only its own rows',
+            default => 'this class and everything below it',
+        };
 
         return sprintf(
             "\n    /** Single table inheritance — %s. */\n"
